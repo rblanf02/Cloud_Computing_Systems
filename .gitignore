@@ -1,0 +1,27 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+
+# Env / secrets
+.env
+*.pem
+*.key
+!infra/nginx/certs/.gitkeep
+
+# Docker / data
+*.log
+.azurite/
+pgdata/
+
+# IDE / OS
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
+
+# Streamlit
+.streamlit/secrets.toml

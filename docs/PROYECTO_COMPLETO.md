@@ -669,4 +669,27 @@ docker compose --profile tls up  # levantar tambien el nginx con HTTPS
 2. `docs/00_plan.md` (plan y decisiones).
 3. `docs/05_division_of_work.md` (tu parte).
 4. `docs/04_architecture.md` (como encaja todo).
-5. `docs/01`, `docs/02`, `docs/03` (contenido de la presentacion).
+5. `docs/06_backend_explicado.md` (el backend explicado para principiantes).
+6. `docs/07_historial_de_cambios.md` (quien cambio que y cuando).
+7. `docs/01`, `docs/02`, `docs/03` (contenido de la presentacion).
+
+## 35. Historial de cambios y autoria (OBLIGATORIO)
+
+Cada vez que **subamos o modifiquemos** algo del proyecto (codigo, documentacion,
+infraestructura o configuracion) **hay que anadir una entrada** en
+`docs/07_historial_de_cambios.md` indicando **quien** lo hizo, **que** cambio, **cuando**
+y **por que**. Es la unica fuente de verdad de la autoria y del estado.
+
+Reglas minimas:
+
+1. No se sube un cambio a Git sin su entrada en el historial.
+2. Cada entrada dice el **AUTOR** (nombre + usuario de Git), la **fecha** y los
+   **ficheros** tocados.
+3. Las entradas **no se borran ni se editan**: si algo se corrige, se anade una entrada
+   nueva que referencia la anterior.
+4. El historial empieza con los cambios iniciales y crece hacia arriba (lo mas reciente,
+   primero en el resumen).
+
+Este documento maestro no se reescribe en cada cambio: remite siempre al historial.
+Asi cualquiera (o una IA) puede entender el proyecto entero y, aparte, ver la evolucion
+y saber a quien preguntar por cada parte.

@@ -43,4 +43,6 @@ docker-compose.yml Plantilla del entorno local (backend, frontend, Postgres,
 | `docs/03_specifications.md` | Seccion 3 (objetivos, tech, riesgos, exito) |
 | `docs/04_architecture.md` | Diagrama, modelo de datos y API |
 | `docs/05_division_of_work.md` | Reparto entre Jose, Ruben, Maria, Diego y Nico |
+| `docs/06_backend_explicado.md` | El backend explicado en lenguaje llano |
+| `docs/07_historial_de_cambios.md` | Registro de cambios y autoria (actualizar en cada cambio) |
 | `docs/presentation_outline.md` | Guion de slides |

@@ -115,7 +115,7 @@ El criterio fue **el stack mas sencillo para el equipo**:
 | Validacion/config | Pydantic + pydantic-settings | Validacion de datos y variables de entorno |
 | Almacenamiento de objetos | **Azure Blob Storage** (prod) / **Azurite** (local) | Versionado + emulacion local sin coste |
 | SDK de storage | azure-storage-blob | Cliente oficial de Azure |
-| Frontend | **javascript** | UI rapida en Python, multi-dispositivo |
+| Frontend | **javascript** | .... |
 | Contenedores | **Docker** + **docker-compose** | Entorno reproducible (requisito del profesor) |
 | Proxy / TLS local | Nginx + certificado autofirmado | HTTPS en local |
 | CI/CD | **GitHub Actions** | Ejecuta tests automaticamente |

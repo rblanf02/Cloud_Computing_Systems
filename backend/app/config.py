@@ -20,8 +20,11 @@ class Settings(BaseSettings):
     # Cryptographic algorithm used to sign JWT tokens.
     jwt_algorithm: str = "HS256"
 
-    # Access token lifetime, expressed in minutes.
-    access_token_expire_minutes: int = 60
+    # Maximum access token lifetime, expressed in minutes.
+    access_token_expire_minutes: int = 1440
+
+    # Maximum inactivity before the server-side session is revoked.
+    session_idle_minutes: int = 10
 
     # Allowed frontend origins for Cross-Origin Resource Sharing (CORS).
     # Multiple origins can be provided as a comma-separated string.

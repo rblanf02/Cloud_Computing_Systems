@@ -1,10 +1,13 @@
+from datetime import datetime, timezone
+from uuid import uuid4
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from ..database import get_db
-from ..deps import get_current_user
+from ..deps import AuthContext, get_auth_context, get_current_user
 from ..logbook import write_log
-from ..models import User
+from ..models import User, UserSession
 from ..schemas import LoginRequest, Message, Token, UserOut, UserRegister
 from ..security import create_access_token, hash_password, verify_password
 
@@ -54,7 +57,16 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             detail="Usuario o contrasena incorrectos",
         )
 
-    token = create_access_token({"sub": user.username})
+    now = datetime.now(timezone.utc)
+    auth_session = UserSession(
+        id=str(uuid4()),
+        user_id=user.id,
+        last_activity_at=now,
+    )
+    db.add(auth_session)
+    db.flush()
+
+    token = create_access_token({"sub": user.username, "sid": auth_session.id})
     write_log(db, action="LOGIN", username=user.username, result="OK")
     db.commit()
     return Token(access_token=token)
@@ -66,7 +78,11 @@ def me(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/logout", response_model=Message)
-def logout(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
-    write_log(db, action="LOGOUT", username=current_user.username, result="OK")
+def logout(
+    context: AuthContext = Depends(get_auth_context),
+    db: Session = Depends(get_db),
+):
+    context.session.revoked_at = datetime.now(timezone.utc)
+    write_log(db, action="LOGOUT", username=context.user.username, result="OK")
     db.commit()
     return Message(detail="Sesion cerrada")

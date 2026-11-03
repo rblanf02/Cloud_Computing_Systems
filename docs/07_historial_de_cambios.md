@@ -35,6 +35,7 @@
 
 | Fecha | Autor | Tipo | Resumen | Commit |
 |---|---|---|---|---|
+| 2026-11-03 | Jose (JoseParedes) | backend + docs + tests | P3: sesiones con idle timeout de 10 min y logout real | (pendiente) |
 | 2026-11-03 | Jose (JoseParedes) | backend + docs + tests | P2: permisos de 3 niveles, versionado explícito, historial/restore y admin | (pendiente) |
 | 2026-11-03 | Jose (JoseParedes) | backend + config | P1: storage Azure/Azurite, versionado, upload/list/download y tests | (pendiente) |
 | 2026-11-03 | Jose (JoseParedes) | backend + config | P0: seguridad de auth, CORS, JWT simplificado y secretos por entorno | (pendiente) |
@@ -45,6 +46,32 @@
 ---
 
 ## 2. Detalle de los cambios
+
+### [2026-11-03] P3: sesiones con inactividad y logout real - Jose
+- **Autor**: Jose Paredes (@JoseParedes)
+- **Archivos/Areas**:
+  - `backend/app/models.py`
+  - `backend/app/deps.py`
+  - `backend/app/routers/auth.py`
+  - `backend/app/config.py`
+  - `.env`, `.env.example`
+  - `backend/tests/test_auth.py`
+  - `docs/04_architecture.md`, `docs/06_backend_explicado.md`, `docs/07_historial_de_cambios.md`
+- **Que se hizo**:
+  - Se añadió la tabla `user_sessions` (`id`, `user_id`, `created_at`, `last_activity_at`,
+    `revoked_at`) y su relación 1:N con `User`.
+  - El login crea una sesión y firma el JWT con `sub` + `sid`.
+  - `get_auth_context` valida usuario y sesión, rechaza sesiones revocadas, aplica
+    `SESSION_IDLE_MINUTES=10` y actualiza `last_activity_at` en cada petición válida.
+  - `logout` marca `revoked_at` de la sesión actual; el token deja de valer de inmediato.
+  - `ACCESS_TOKEN_EXPIRE_MINUTES` pasa a ser la vida máxima del JWT (1440 min por defecto);
+    el corte real por inactividad lo controla la sesión.
+  - Tests de logout revocado, revocación por inactividad, extensión por actividad,
+    sesiones independientes y tokens sin `sid`.
+- **Por que**: el logout anterior solo registraba el evento y los JWT seguían siendo
+  válidos hasta su caducidad; se necesita cerrar sesión de verdad y expirar por inactividad.
+- **Como probarlo**: `docker compose exec backend pytest`; después, login, `/auth/me`,
+  logout y repetir `/auth/me` con el mismo token (debe responder `401`).
 
 ### [2026-11-03] P2: permisos de 3 niveles, versionado explícito y admin - Jose
 - **Autor**: Jose Paredes (@JoseParedes)

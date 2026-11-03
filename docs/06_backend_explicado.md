@@ -24,7 +24,7 @@ backend/
     __init__.py         Marca la carpeta como "paquete" de Python
     config.py           Lee las variables del .env
     database.py         Conexion a PostgreSQL + entrega de sesiones
-    models.py           Las 4 tablas del ER (User, File, FileVersion, LogEvent)
+    models.py           Las 5 tablas del ER (User, UserSession, File, FileVersion, LogEvent)
     schemas.py          Forma de los JSON que entran y salen por la API
     security.py         Hash de contrasena (bcrypt) + crear/leer JWT
     deps.py             Dependencias: usuario actual, permisos y fichero propio
@@ -119,8 +119,9 @@ Las versiones son **rangos** (`>=` y `<`) para no romper el proyecto al actualiz
 
 Usa `pydantic-settings` para leer el `.env` (o las variables de entorno del contenedor).
 Expone un objeto `settings` con: `database_url`, `jwt_secret`, `jwt_algorithm`,
-`access_token_expire_minutes`, `cors_origins`, `seed_admin`, la conexion de Azure/Azurite
-y `max_upload_size_mb` (10 MB por defecto).
+`access_token_expire_minutes` (vida maxima del JWT), `session_idle_minutes` (10 min sin
+actividad), `cors_origins`, `seed_admin`, la conexion de Azure/Azurite y
+`max_upload_size_mb` (10 MB por defecto).
 Asi **no escribimos secretos en el codigo**: vienen del `.env`.
 
 ### `app/database.py` (la conexion a la base de datos)
@@ -131,13 +132,14 @@ Asi **no escribimos secretos en el codigo**: vienen del `.env`.
 - `get_db()`: una dependencia que abre una sesion, la entrega al endpoint y **la cierra
   al terminar**. Se usa como `db: Session = Depends(get_db)`.
 
-### `app/models.py` (las 4 tablas del ER)
+### `app/models.py` (las 5 tablas del ER)
 
 Cada clase es una tabla. Aqui esta **todo el ER**:
 
 | Modelo | Tabla | Que guarda |
 |---|---|---|
 | `User` | `users` | Las personas: usuario, email, hash, permisos (`can_read/write/update`), `is_admin`. |
+| `UserSession` | `user_sessions` | Cada login: usuario, fecha de creacion, ultima actividad y fecha de revocacion. |
 | `File` | `files` | Cada fichero como **concepto**: dueno, nombre, tipo, version actual. **No guarda el contenido.** |
 | `FileVersion` | `file_versions` | Cada **subida**: numero de version, tamano, tipo MIME, donde esta el blob (`blob_name`), fecha, quien. |
 | `LogEvent` | `log_events` | El **LogBook**: quien hizo que y cuando. |
@@ -147,8 +149,8 @@ Conceptos de base de datos que aparecen:
 - **PK (Primary Key)**: `id`. Identifica cada fila de forma unica.
 - **FK (Foreign Key)**: una columna que apunta a otra tabla. Ej. `files.owner_id` apunta a
   `users.id`.
-- **Relacion 1:N**: "uno a muchos". Un usuario tiene muchos ficheros; un fichero tiene
-  muchas versiones.
+- **Relacion 1:N**: "uno a muchos". Un usuario tiene muchas sesiones y ficheros; un
+  fichero tiene muchas versiones.
 - **Constraint unica**: impide repetir datos. Un usuario no puede tener dos ficheros con
   el mismo nombre (`owner_id + filename`) y un fichero no puede repetir numero de version.
 
@@ -177,17 +179,21 @@ responde `422` automaticamente.
 
 - `hash_password` / `verify_password`: convierten la contrasena en un texto revuelto
   (bcrypt) y la comprueban. Nunca se guarda la contrasena en claro.
-- `create_access_token`: fabrica el JWT metiendo la identidad del usuario (`sub`) y una
-  fecha de caducidad (`exp`), firmado con `jwt_secret`. Los permisos no viajan en el
-  token: se consultan siempre en la base de datos.
+- `create_access_token`: fabrica el JWT metiendo la identidad del usuario (`sub`), el
+  identificador de sesion (`sid`) y una fecha de caducidad maxima (`exp`), firmado con
+  `jwt_secret`. Los permisos no viajan en el token: se consultan siempre en la base de
+  datos.
 - `decode_token`: comprueba que el token es valido y no ha caducado. Si algo falla,
   devuelve `None`.
 
 ### `app/deps.py` (dependencias reutilizables)
 
-- `get_current_user`: mira la cabecera `Authorization: Bearer <token>`, lo verifica y
-  carga el usuario de la base de datos. Si falta o es invalido, lanza `401`. Los endpoints
-  que requieren estar logueado lo usan con `Depends(get_current_user)`.
+- `get_auth_context`: mira la cabecera `Authorization: Bearer <token>`, valida el JWT,
+  carga el usuario y su fila en `user_sessions`. Rechaza sesiones revocadas y aplica el
+  idle timeout de `SESSION_IDLE_MINUTES`: si no hay actividad suficiente, revoca la sesion
+  y lanza `401`; si sigue viva, actualiza `last_activity_at`. Devuelve usuario + sesion.
+- `get_current_user`: envuelve `get_auth_context` y devuelve solo el usuario. Los
+  endpoints que requieren estar logueado lo usan con `Depends(get_current_user)`.
 - `require_permission("read" / "write" / "update")`: comprueba que el usuario tiene el
   permiso. Si no lo tiene, lanza `403`. Los endpoints de ficheros lo usan.
 - `get_owned_file(db, file_id, user)`: busca un fichero del usuario actual. Si no existe
@@ -217,9 +223,9 @@ download...) llama aqui. **Nico** ampliara esto con el export a CSV/JSON.
 | Endpoint | Que hace |
 |---|---|
 | `POST /auth/register` | Comprueba que no exista → hashea la contrasena → guarda el usuario → registra `REGISTER` → devuelve los datos. |
-| `POST /auth/login` | Busca el usuario → comprueba la contrasena (si falla: `401` + registra `LOGIN FAIL`) → crea el JWT → registra `LOGIN`. |
-| `GET /auth/me` | Devuelve los datos del usuario actual (usa `get_current_user`). |
-| `POST /auth/logout` | Registra `LOGOUT`. El token caduca solo (no se puede invalidar). |
+| `POST /auth/login` | Busca el usuario → comprueba la contrasena (si falla: `401` + registra `LOGIN FAIL`) → crea `UserSession` → crea el JWT con `sid` → registra `LOGIN`. |
+| `GET /auth/me` | Devuelve los datos del usuario actual (usa `get_current_user` y valida la sesion). |
+| `POST /auth/logout` | Marca `revoked_at` en la sesion actual y registra `LOGOUT`. |
 
 ### `app/routers/files.py` (los endpoints de ficheros)
 
@@ -320,22 +326,24 @@ Resumen de dependencias (quien usa a quien):
 
 ### Login (y donde entra el JWT)
 `POST /auth/login {"username", "password"}`
-→ busca el usuario → `verify_password` → si va bien, `create_access_token({sub})`
-→ devuelve `{"access_token": "...", "token_type": "bearer"}`.
+→ busca el usuario → `verify_password` → si va bien, crea una fila en `user_sessions` →
+`create_access_token({sub, sid})` → devuelve
+`{"access_token": "...", "token_type": "bearer"}`.
 
 > **Como funciona el token (la pulsera).** Haces login **una vez** y el backend te da un
 > **token firmado**. El frontend lo guarda y lo envia en **cada** peticion protegida en la
-> cabecera `Authorization: Bearer <token>`. El backend **no recuerda** nada entre
-> peticiones: solo verifica el sello (firma) y la caducidad del token. Si alguien cambia
-> algo del token, la firma deja de cuadrar y se rechaza con `401`.
+> cabecera `Authorization: Bearer <token>`. La firma y `exp` se validan; ademas el `sid`
+> permite consultar la sesion en servidor. Si alguien cambia algo del token, la firma deja
+> de cuadrar y se rechaza con `401`.
 
 ### Usuario actual
-`GET /auth/me` con la cabecera del token → `get_current_user` valida el token y carga el
-usuario → devuelve sus datos.
+`GET /auth/me` con la cabecera del token → `get_auth_context` valida el JWT, carga el
+usuario y su sesion, comprueba que no esta revocada ni inactiva y actualiza
+`last_activity_at` → devuelve los datos del usuario.
 
 ### Logout
-`POST /auth/logout` → registra `LOGOUT`. El token **no se borra** en el servidor (JWT no
-tiene estado), simplemente el frontend deja de usarlo y caduca solo.
+`POST /auth/logout` → valida la sesion, marca `revoked_at` y registra `LOGOUT`. El token
+deja de valer inmediatamente; los demas dispositivos/sesiones del usuario siguen activos.
 
 ### Crear un fichero
 `POST /files/upload` con el fichero en `multipart/form-data` y el token
@@ -435,9 +443,11 @@ docker compose exec backend pytest
 
 Los tests (`tests/test_auth.py`, `tests/test_files.py` y `tests/test_admin.py`) comprueban:
 `/health`, registro + login + `/auth/me`, login con contrasena incorrecta (`401`), usuario
-duplicado (`400`), `/auth/me` sin token (`401`), logout, creacion y versionado, permisos,
-aislamiento entre usuarios, historial, descarga de versiones, restauracion, rollback si
-falla el storage, listado global del admin, bypass del admin y revocacion de permisos.
+duplicado (`400`), `/auth/me` sin token (`401`), logout con revocacion del token,
+revocacion solo de la sesion actual, caducidad por inactividad, extension de actividad,
+tokens sin `sid`, creacion y versionado, permisos, aislamiento entre usuarios, historial,
+descarga de versiones, restauracion, rollback si falla el storage, listado global del
+admin, bypass del admin y revocacion de permisos.
 
 ---
 
@@ -460,7 +470,7 @@ falla el storage, listado global del admin, bypass del admin y revocacion de per
 - `requirements.txt` → lista de librerias.
 - `config.py` → lee el `.env`.
 - `database.py` → conecta con PostgreSQL y da sesiones.
-- `models.py` → define las 4 tablas (el ER).
+- `models.py` → define las 5 tablas (el ER).
 - `schemas.py` → define los JSON de la API.
 - `security.py` → hash de contrasenas y JWT.
 - `deps.py` → "quien eres" y "que permiso tienes".
@@ -498,8 +508,11 @@ falla el storage, listado global del admin, bypass del admin y revocacion de per
 ## 10. Glosario corto
 
 - **API REST**: interfaz HTTP por la que el frontend pide cosas al backend.
-- **JWT**: pase firmado que identifica al usuario; contiene su identidad (`sub`), la
-  caducidad (`exp`) y la firma. Los permisos se consultan en la base de datos.
+- **JWT**: pase firmado que identifica al usuario; contiene su identidad (`sub`), el id de
+  sesion (`sid`), la caducidad maxima (`exp`) y la firma. Los permisos se consultan en la
+  base de datos.
+- **Sesion**: fila en `user_sessions`; puede revocarse con logout o por inactividad antes
+  de que caduque el JWT.
 - **Hash (bcrypt)**: contrasena convertida en texto revuelto e irreversible.
 - **ORM (SQLAlchemy)**: traduce entre clases de Python y tablas SQL.
 - **PK / FK**: clave primaria (identifica una fila) / clave foranea (apunta a otra tabla).

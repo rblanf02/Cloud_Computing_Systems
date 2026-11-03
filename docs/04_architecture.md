@@ -49,6 +49,10 @@ created_at                    |                             |
 log_events
 ----------
 id (PK) | timestamp | username | action | resource | result | details
+
+user_sessions
+-------------
+id (PK) | user_id (FK -> users.id) | created_at | last_activity_at | revoked_at
 ```
 
 ## API REST (resumen)
@@ -56,8 +60,8 @@ id (PK) | timestamp | username | action | resource | result | details
 | Metodo | Ruta | Permiso | Descripcion |
 |---|---|---|---|
 | POST | `/auth/register` | publico | Crea usuario. |
-| POST | `/auth/login` | publico | Devuelve JWT. |
-| POST | `/auth/logout` | autenticado | Registra logout. |
+| POST | `/auth/login` | publico | Crea una sesion y devuelve JWT con `sid`. |
+| POST | `/auth/logout` | autenticado | Revoca la sesion actual. |
 | GET | `/auth/me` | autenticado | Datos del usuario. |
 | GET | `/files` | read | Lista los ficheros del usuario con su ultima version. |
 | POST | `/files/upload` | write | Crea un fichero nuevo. |
@@ -74,8 +78,13 @@ id (PK) | timestamp | username | action | resource | result | details
 
 ## Flujos
 
-**Login**: credenciales -> verify hash -> JWT (identidad + caducidad) -> log `LOGIN`.
-Los permisos se leen de la base de datos en cada peticion.
+**Login**: credenciales -> verify hash -> crea fila en `user_sessions` -> JWT con
+`sub` + `sid` -> log `LOGIN`. Los permisos se leen de la base de datos en cada peticion.
+
+**Sesion**: en cada peticion se comprueba la sesion en servidor y se actualiza
+`last_activity_at`. Si pasan `SESSION_IDLE_MINUTES` (10 por defecto) sin actividad, la
+sesion se revoca y el token deja de valer. `logout` marca `revoked_at` y revoca solo esa
+sesion. `ACCESS_TOKEN_EXPIRE_MINUTES` es el limite maximo del JWT.
 
 **Upload nuevo**:
 1. Cliente sube el fichero a `POST /files/upload`.

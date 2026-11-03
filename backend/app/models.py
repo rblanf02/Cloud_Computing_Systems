@@ -29,6 +29,33 @@ class User(Base):
 
     files = relationship("File", back_populates="owner")
     versions = relationship("FileVersion", back_populates="created_by_user")
+    sessions = relationship(
+        "UserSession",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+
+class UserSession(Base):
+    __tablename__ = "user_sessions"
+
+    id = Column(String(36), primary_key=True)
+    user_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    last_activity_at = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
+    revoked_at = Column(DateTime(timezone=True), nullable=True, index=True)
+
+    user = relationship("User", back_populates="sessions")
 
 
 class File(Base):

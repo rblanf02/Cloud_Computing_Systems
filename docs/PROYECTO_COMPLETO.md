@@ -203,8 +203,8 @@ Relaciones:
 | Metodo | Ruta | Permiso | Descripcion |
 |---|---|---|---|
 | POST | `/auth/register` | publico | Crea un usuario. |
-| POST | `/auth/login` | publico | Devuelve un token JWT. |
-| POST | `/auth/logout` | autenticado | Registra el cierre de sesion. |
+| POST | `/auth/login` | publico | Crea una sesion y devuelve un JWT con `sid`. |
+| POST | `/auth/logout` | autenticado | Revoca la sesion actual. |
 | GET | `/auth/me` | autenticado | Datos del usuario actual. |
 | GET | `/files` | read | Lista los ficheros del usuario con su ultima version. |
 | POST | `/files/upload` | write | Crea un fichero nuevo (409 si ya existe el nombre). |
@@ -230,9 +230,16 @@ Relaciones:
 **Login**
 1. El usuario envia usuario y contrasena.
 2. El backend comprueba el hash de la contrasena (bcrypt).
-3. Si es correcto, firma un **JWT** con la identidad del usuario; los permisos se
-   consultan en la base de datos en cada peticion.
+3. Si es correcto, crea una fila en `user_sessions` y firma un **JWT** con la identidad
+   del usuario (`sub`) y el id de sesion (`sid`); los permisos se consultan en la base de
+   datos en cada peticion.
 4. Registra `LOGIN` en el LogBook.
+
+**Sesion y logout**
+- Cada peticion autenticada comprueba la sesion en servidor y actualiza `last_activity_at`.
+- Tras 10 minutos de inactividad, la sesion se revoca y el token deja de valer.
+- `POST /auth/logout` marca `revoked_at` de la sesion actual; las demas sesiones del
+  usuario siguen activas.
 
 **Upload nuevo**
 1. El usuario sube el fichero a `POST /files/upload`.
@@ -266,7 +273,8 @@ Relaciones:
 ## 9. Seguridad
 
 - **Contrasenas**: nunca en claro; se guardan con hash **bcrypt**.
-- **Sesiones**: **JWT** firmado con una clave secreta; incluye caducidad.
+- **Sesiones**: **JWT** firmado con una clave secreta; incluye `sid` y caducidad máxima.
+  La sesión en `user_sessions` se revoca por logout o tras 10 min de inactividad.
 - **Autorizacion**: cada endpoint declara el permiso requerido
   (`read`/`write`/`update`) mediante una dependencia reutilizable.
 - **Transporte**: **HTTPS/TLS** obligatorio.
@@ -478,8 +486,8 @@ que es lo que pide el enunciado. Nextcloud es la referencia mas cercana en filos
 ## 19. Glosario
 
 - **API REST**: interfaz HTTP por la que el frontend pide cosas al backend.
-- **JWT (JSON Web Token)**: "pase" firmada que identifica al usuario; contiene sus
-  permisos y caduca.
+- **JWT (JSON Web Token)**: "pase" firmada que identifica al usuario; contiene `sub`,
+  `sid` y caducidad máxima. Los permisos se consultan en la base de datos.
 - **Blob / almacenamiento de objetos**: servicio para guardar archivos por trozos
   (Azure Blob Storage; Azurite es su emulador local).
 - **Blob versioning**: funcion de Azure que guarda versiones de cada objeto.

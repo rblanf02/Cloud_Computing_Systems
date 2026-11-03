@@ -6,22 +6,23 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .database import Base, SessionLocal, engine
 from .models import User
-from .routers import auth
+from .routers import admin, auth, files
 from .security import hash_password
-
-ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "admin123"
 
 
 def seed_admin() -> None:
     db = SessionLocal()
     try:
-        if db.query(User).filter(User.username == ADMIN_USERNAME).first():
+        if (
+            db.query(User)
+            .filter(User.username == settings.seed_admin_username)
+            .first()
+        ):
             return
         admin = User(
-            username=ADMIN_USERNAME,
-            email="admin@example.com",
-            hashed_password=hash_password(ADMIN_PASSWORD),
+            username=settings.seed_admin_username,
+            email=settings.seed_admin_email,
+            hashed_password=hash_password(settings.seed_admin_password),
             can_read=True,
             can_write=True,
             can_update=True,
@@ -35,6 +36,14 @@ def seed_admin() -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    if settings.environment != "development":
+        if settings.jwt_secret == "dev-only-change-me":
+            raise RuntimeError("JWT_SECRET debe configurarse fuera de desarrollo")
+        if settings.seed_admin and settings.seed_admin_password == "admin123":
+            raise RuntimeError(
+                "SEED_ADMIN_PASSWORD debe cambiarse fuera de desarrollo"
+            )
+
     Base.metadata.create_all(bind=engine)
     if settings.seed_admin:
         seed_admin()
@@ -52,12 +61,14 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins_list,
-        allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "Accept"],
     )
 
     app.include_router(auth.router)
+    app.include_router(files.router)
+    app.include_router(admin.router)
 
     @app.get("/health", tags=["health"])
     def health():

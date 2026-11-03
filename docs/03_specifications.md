@@ -50,7 +50,8 @@ Limites (fuera de alcance en la 1a version):
 
 - [ ] Las 6 capacidades funcionan: login, logout, upload, download, list, logbook.
 - [ ] Autenticacion y autorizacion read/write/update verificadas con tests.
-- [ ] Control de versiones: subir 3 veces un fichero genera 3 versiones con fecha/tamano.
+- [ ] Control de versiones: crear un fichero y subir 2 versiones genera 3 versiones con fecha/tamano; se pueden descargar y restaurar.
+- [ ] El admin puede listar usuarios/ficheros y revocar `can_read`, `can_write` y `can_update`.
 - [ ] LogBook exportable a CSV y JSON con logins y operaciones.
 - [ ] Transferencia por HTTPS (certificado valido en cloud).
 - [ ] Despliegue funcional en Azure + demo en vivo.

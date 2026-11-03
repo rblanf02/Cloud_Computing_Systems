@@ -4,13 +4,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class UserRegister(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     username: str = Field(min_length=3, max_length=50)
     email: str = Field(min_length=3, max_length=255)
     password: str = Field(min_length=6, max_length=72)
-    can_read: bool = True
-    can_write: bool = False
-    can_update: bool = False
-    is_admin: bool = False
 
 
 class UserOut(BaseModel):
@@ -24,6 +22,36 @@ class UserOut(BaseModel):
     can_update: bool
     is_admin: bool
     created_at: datetime
+
+
+class FileOut(BaseModel):
+    id: int
+    owner_id: int
+    owner_username: str
+    filename: str
+    content_type: str | None
+    current_version: int
+    size_bytes: int
+    version_created_at: datetime
+    created_at: datetime
+
+
+class FileVersionOut(BaseModel):
+    id: int
+    version_number: int
+    size_bytes: int
+    content_type: str | None
+    created_at: datetime
+    created_by: int
+    created_by_username: str
+
+
+class UserPermissionsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    can_read: bool | None = None
+    can_write: bool | None = None
+    can_update: bool | None = None
 
 
 class LoginRequest(BaseModel):

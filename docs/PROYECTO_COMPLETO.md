@@ -207,10 +207,15 @@ Relaciones:
 | POST | `/auth/logout` | autenticado | Registra el cierre de sesion. |
 | GET | `/auth/me` | autenticado | Datos del usuario actual. |
 | GET | `/files` | read | Lista los ficheros del usuario con su ultima version. |
-| POST | `/files/upload` | write | Sube un fichero (crea una nueva version). |
+| POST | `/files/upload` | write | Crea un fichero nuevo (409 si ya existe el nombre). |
+| POST | `/files/{id}/versions` | update | Sube una version nueva de un fichero existente. |
 | GET | `/files/{id}/download` | read | Descarga la ultima version. |
 | GET | `/files/{id}/versions` | read | Historial de versiones. |
 | GET | `/files/{id}/versions/{v}/download` | read | Descarga una version concreta. |
+| POST | `/files/{id}/versions/{v}/restore` | update | Restaura una version como version nueva. |
+| GET | `/admin/users` | admin | Lista usuarios y permisos. |
+| PATCH | `/admin/users/{id}/permissions` | admin | Cambia `can_read`, `can_write` y `can_update`. |
+| GET | `/admin/files` | admin | Lista todos los ficheros. |
 | GET | `/logs` | read | Lista eventos (propios; admin ve todos). |
 | GET | `/logs/export?fmt=csv\|json` | read | Exporta el LogBook. |
 | GET | `/health` | publico | Comprobacion de estado. |
@@ -225,16 +230,23 @@ Relaciones:
 **Login**
 1. El usuario envia usuario y contrasena.
 2. El backend comprueba el hash de la contrasena (bcrypt).
-3. Si es correcto, firma un **JWT** con el usuario y sus permisos.
+3. Si es correcto, firma un **JWT** con la identidad del usuario; los permisos se
+   consultan en la base de datos en cada peticion.
 4. Registra `LOGIN` en el LogBook.
 
-**Upload (crea una version)**
+**Upload nuevo**
 1. El usuario sube el fichero a `POST /files/upload`.
 2. El backend comprueba el permiso `write`.
-3. Sube el contenido al blob con nombre `owner/{file_id}/v{n}`.
-4. Actualiza/crea la fila en `files` e inserta una fila en `file_versions`
-   (fecha, tamano, numero de version).
-5. Registra `UPLOAD` en el LogBook.
+3. Si ya existe ese nombre para el usuario, responde `409`.
+4. Crea la fila en `files`, sube el blob `owner/{file_id}/v1` e inserta `file_versions`.
+5. Registra `UPLOAD_NEW` en el LogBook.
+
+**Nueva version**
+1. El usuario sube el fichero a `POST /files/{id}/versions`.
+2. El backend comprueba el permiso `update` y que el fichero es suyo (o es admin).
+3. Bloquea la fila de `files`, calcula `n = current_version + 1` y sube el blob.
+4. Inserta `file_versions` y actualiza `current_version`.
+5. Registra `UPLOAD_VERSION` en el LogBook.
 
 **Download**
 1. El backend comprueba el permiso `read`.
@@ -266,14 +278,16 @@ Relaciones:
 
 ## 10. Control de versiones (requisito de "muy buena nota")
 
-- Cada **subida** de un fichero existente crea una **nueva version**.
-- Se guarda por version: **fecha**, **tamano** y **numero de version**.
+- Cada subida a `POST /files/{id}/versions` crea una **nueva version**.
+- Se guarda por version: **fecha**, **tamano**, **tipo MIME** y **numero de version**.
 - Se implementa en **dos capas**:
   1. **Blob por version**: cada version es un objeto distinto
      (`owner/{file_id}/v{n}`), lo que hace el historial explicito.
   2. **Blob versioning de Azure**: capa extra de seguridad a nivel de cuenta
      (recomendado activarlo en produccion).
-- El usuario puede **listar** el historial y **descargar cualquier version**.
+- El usuario puede **listar** el historial, **descargar cualquier version** y
+  **restaurar** una version antigua creando una nueva (sin borrar historial).
+- Restaurar no mueve el puntero hacia atras: la version restaurada pasa a ser la actual.
 
 ---
 
@@ -402,7 +416,9 @@ La 1a presentacion puede prepararse en 2-3 dias con un prototipo minimo.
 
 - [ ] Las 6 capacidades funcionan: login, logout, upload, download, list, logbook.
 - [ ] Autenticacion y autorizacion read/write/update verificadas con pruebas.
-- [ ] Subir 3 veces un fichero genera 3 versiones con fecha y tamano.
+- [ ] Crear un fichero y subir 2 versiones genera 3 versiones con fecha y tamano.
+- [ ] El historial permite descargar y restaurar versiones antiguas.
+- [ ] El admin puede listar usuarios/ficheros y revocar permisos.
 - [ ] LogBook exportable a CSV y JSON.
 - [ ] Transferencia por HTTPS con certificado valido en la nube.
 - [ ] Despliegue funcional en Azure + demo en vivo.
@@ -576,13 +592,17 @@ docker compose --profile tls up  # levantar tambien el nginx con HTTPS
 ## 26. Check-list para probar en local (antes de la nube)
 
 1. `docker compose up --build` y comprobar que los 4 contenedores estan "healthy".
-2. Abrir `http://localhost:8000/docs` (Swagger) y probar login con `admin`/`admin123`.
-3. Subir **el mismo fichero 3 veces** -> deben aparecer **3 versiones**.
+2. Abrir `http://localhost:8000/docs` (Swagger) y probar login con el usuario y la
+   contrasena configurados en `SEED_ADMIN_USERNAME` y `SEED_ADMIN_PASSWORD` del `.env`.
+3. Crear un fichero con `POST /files/upload` y subir **2 versiones** mas por
+   `POST /files/{id}/versions` -> deben aparecer **3 versiones**.
 4. Descargar la version 1 y la 3 -> comprobar que el contenido es el correcto.
-5. Abrir `http://localhost:8501`, probar login, subir y descargar desde la UI.
-6. Ver el **LogBook** y exportarlo a **CSV** y **JSON**.
-7. Probar con **un usuario sin permiso de escritura** -> debe recibir un error 403.
-8. Probar en el **navegador del movil** (misma wifi, IP del PC en vez de localhost).
+5. Restaurar la version 1 -> debe crear la version 4 con el contenido original.
+6. Abrir `http://localhost:8501`, probar login, crear, versionar y descargar desde la UI.
+7. Ver el **LogBook** y exportarlo a **CSV** y **JSON**.
+8. Probar con **un usuario sin permiso de escritura** -> debe recibir un error 403.
+9. Entrar como admin, listar todos los ficheros y revocar un permiso.
+10. Probar en el **navegador del movil** (misma wifi, IP del PC en vez de localhost).
 
 > Probar TODO en local primero. El 70% de los problemas se resuelven aqui y sin gastar
 > credito de Azure.
@@ -631,6 +651,7 @@ docker compose --profile tls up  # levantar tambien el nginx con HTTPS
 | Perdi los datos | Se hizo `down -v` | Evitarlo; hacer copias/backups |
 | El login devuelve 401 | Token caducado o mal enviado | Rehacer login; revisar cabecera `Authorization` |
 | El upload devuelve 403 | Usuario sin permiso `write` | Revisar permisos del usuario |
+| El upload devuelve 409 | Ya existe ese nombre para el usuario | Usar `POST /files/{id}/versions` |
 | Function/version de libreria no existe | La IA la invento | Mirar documentacion oficial y fijar version |
 
 ## 31. Orden recomendado de trabajo (resumen)
@@ -646,8 +667,8 @@ docker compose --profile tls up  # levantar tambien el nginx con HTTPS
 ## 32. Como hacer una buena demo
 
 - Ensayar la demo **antes**; tenerla lista por si falla la wifi (capturas/video).
-- Guion minimo: login -> subir 2 veces el mismo fichero -> mostrar versiones ->
-  descargar version antigua -> abrir LogBook -> exportar CSV/JSON.
+- Guion minimo: login -> crear fichero -> subir 2 versiones -> mostrar historial ->
+  descargar version antigua -> restaurarla -> abrir LogBook -> exportar CSV/JSON.
 - Tener a mano el **diagrama** y explicar que hace cada pieza.
 - Si algo falla en directo, mantener la calma y explicar lo que **deberia** pasar
   mientras lo arreglas (o pasa a las capturas).

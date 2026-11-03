@@ -6,6 +6,7 @@ from sqlalchemy import (
     ForeignKey,
     Integer,
     String,
+    UniqueConstraint,
     func,
 )
 from sqlalchemy.orm import relationship
@@ -32,6 +33,9 @@ class User(Base):
 
 class File(Base):
     __tablename__ = "files"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "filename", name="uq_files_owner_filename"),
+    )
 
     id = Column(Integer, primary_key=True)
     owner_id = Column(Integer, ForeignKey("users.id"), nullable=False)
@@ -46,11 +50,19 @@ class File(Base):
 
 class FileVersion(Base):
     __tablename__ = "file_versions"
+    __table_args__ = (
+        UniqueConstraint(
+            "file_id",
+            "version_number",
+            name="uq_versions_file_number",
+        ),
+    )
 
     id = Column(Integer, primary_key=True)
     file_id = Column(Integer, ForeignKey("files.id"), nullable=False)
     version_number = Column(Integer, nullable=False)
     size_bytes = Column(BigInteger, nullable=False, default=0)
+    content_type = Column(String(100), nullable=True)
     blob_name = Column(String(500), nullable=False)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
@@ -63,9 +75,14 @@ class LogEvent(Base):
     __tablename__ = "log_events"
 
     id = Column(Integer, primary_key=True)
-    timestamp = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    username = Column(String(50), nullable=True)
-    action = Column(String(50), nullable=False)
+    timestamp = Column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False,
+        index=True,
+    )
+    username = Column(String(50), nullable=True, index=True)
+    action = Column(String(50), nullable=False, index=True)
     resource = Column(String(255), nullable=True)
-    result = Column(String(20), nullable=False, default="OK")
+    result = Column(String(20), nullable=False, default="OK", index=True)
     details = Column(String(500), nullable=True)

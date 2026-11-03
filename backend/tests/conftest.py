@@ -7,6 +7,7 @@ from sqlalchemy.orm import sessionmaker
 from app.config import settings
 from app.database import Base, get_db
 from app.main import app as fastapi_app
+from app.storage import InMemoryStorage, get_storage
 
 TEST_DB_NAME = "appdb_test"
 _base_url = make_url(settings.database_url)
@@ -51,3 +52,20 @@ def _prepare_database():
 @pytest.fixture()
 def client():
     return TestClient(fastapi_app)
+
+
+@pytest.fixture()
+def db_session():
+    db = TestingSessionLocal()
+    try:
+        yield db
+    finally:
+        db.close()
+
+
+@pytest.fixture()
+def storage():
+    store = InMemoryStorage()
+    fastapi_app.dependency_overrides[get_storage] = lambda: store
+    yield store
+    fastapi_app.dependency_overrides.pop(get_storage, None)

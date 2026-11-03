@@ -17,7 +17,7 @@ services:
 
   azurite:
     image: mcr.microsoft.com/azure-storage/azurite:latest
-    command: "azurite-blob --blobHost 0.0.0.0 --blobPort 10000 --location /data --loose"
+    command: "azurite-blob --blobHost 0.0.0.0 --blobPort 10000 --location /data --loose --skipApiVersionCheck"
     volumes:
       - azurite:/data
     ports:

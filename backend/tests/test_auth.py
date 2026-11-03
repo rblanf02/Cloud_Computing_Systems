@@ -25,6 +25,34 @@ def test_register_and_login(client):
     assert response.json()["username"] == "maria"
 
 
+def test_register_default_permissions(client):
+    response = client.post(
+        "/auth/register",
+        json={"username": "ana", "email": "ana@example.com", "password": "secreto123"},
+    )
+    assert response.status_code == 201
+    data = response.json()
+    assert data["can_read"] is True
+    assert data["can_write"] is False
+    assert data["can_update"] is False
+    assert data["is_admin"] is False
+
+
+def test_register_cannot_assign_privileges(client):
+    response = client.post(
+        "/auth/register",
+        json={
+            "username": "intruso",
+            "email": "intruso@example.com",
+            "password": "secreto123",
+            "is_admin": True,
+            "can_write": True,
+            "can_update": True,
+        },
+    )
+    assert response.status_code == 422
+
+
 def test_login_wrong_password(client):
     client.post(
         "/auth/register",
@@ -47,6 +75,22 @@ def test_register_duplicate_username(client):
 
 def test_me_without_token(client):
     response = client.get("/auth/me")
+    assert response.status_code == 401
+
+
+def test_me_with_invalid_bearer_token(client):
+    response = client.get(
+        "/auth/me",
+        headers={"Authorization": "Bearer esto-no-es-un-jwt"},
+    )
+    assert response.status_code == 401
+
+
+def test_me_with_wrong_auth_scheme(client):
+    response = client.get(
+        "/auth/me",
+        headers={"Authorization": "Basic dXNlcjpwYXNz"},
+    )
     assert response.status_code == 401
 
 

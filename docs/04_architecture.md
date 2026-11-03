@@ -40,8 +40,9 @@ username (unique)             owner_id (FK -> users.id)     file_id (FK -> files
 email                         filename                      version_number
 hashed_password               content_type                  size_bytes
 can_read  (bool)              created_at                    blob_name
-can_write (bool)              current_version               created_at
-can_update(bool)                                            created_by (FK -> users.id)
+can_write (bool)              current_version               content_type
+can_update(bool)                                            created_at
+is_admin  (bool)                                            created_by (FK -> users.id)
 created_at                    |                             |
                               +--- 1:N --- file_versions
 
@@ -58,27 +59,45 @@ id (PK) | timestamp | username | action | resource | result | details
 | POST | `/auth/login` | publico | Devuelve JWT. |
 | POST | `/auth/logout` | autenticado | Registra logout. |
 | GET | `/auth/me` | autenticado | Datos del usuario. |
-| GET | `/files` | read | Lista ficheros con ultima version. |
-| POST | `/files/upload` | write | Sube fichero (nueva version). |
-| GET | `/files/{id}/download` | read | Descarga ultima version. |
+| GET | `/files` | read | Lista los ficheros del usuario con su ultima version. |
+| POST | `/files/upload` | write | Crea un fichero nuevo. |
+| POST | `/files/{id}/versions` | update | Sube una version nueva de un fichero existente. |
+| GET | `/files/{id}/download` | read | Descarga la ultima version. |
 | GET | `/files/{id}/versions` | read | Historial de versiones. |
 | GET | `/files/{id}/versions/{v}/download` | read | Descarga una version concreta. |
+| POST | `/files/{id}/versions/{v}/restore` | update | Restaura una version como version nueva. |
+| GET | `/admin/users` | admin | Lista usuarios y permisos. |
+| PATCH | `/admin/users/{id}/permissions` | admin | Cambia `can_read`, `can_write` y `can_update`. |
+| GET | `/admin/files` | admin | Lista todos los ficheros. |
 | GET | `/logs` | read | Lista eventos (propios; admin: todos). |
 | GET | `/logs/export?fmt=csv\|json` | read | Exporta el LogBook. |
 
 ## Flujos
 
-**Login**: credenciales -> verify hash -> JWT (rol + permisos) -> log `LOGIN`.
+**Login**: credenciales -> verify hash -> JWT (identidad + caducidad) -> log `LOGIN`.
+Los permisos se leen de la base de datos en cada peticion.
 
-**Upload** (crea version):
+**Upload nuevo**:
 1. Cliente sube el fichero a `POST /files/upload`.
 2. Backend comprueba permiso `write`.
-3. Sube el blob `owner/{file_id}/v{n}` a Blob/Azurite.
-4. Crea/actualiza `files` e inserta fila en `file_versions` (fecha, tamano, n).
-5. Registra evento `UPLOAD` en `log_events`.
+3. Rechaza si el usuario ya tiene un fichero con ese nombre (`409`).
+4. Crea `files`, sube el blob `owner/{file_id}/v1` y crea `file_versions`.
+5. Registra `UPLOAD_NEW`.
 
-**Download**: comprueba `read` -> descarga binario del blob -> log `DOWNLOAD`.
+**Nueva version**:
+1. Cliente sube el fichero a `POST /files/{id}/versions`.
+2. Backend comprueba permiso `update` y que el fichero es suyo.
+3. Bloquea la fila de `files`, calcula `n = current_version + 1` y sube el blob.
+4. Inserta `file_versions` y actualiza `current_version`.
+5. Registra `UPLOAD_VERSION`.
 
-**List**: lee `files` + ultima version -> lista -> log `LIST`.
+**Download**: comprueba `read` -> descarga el blob de la version actual -> log `DOWNLOAD`.
+
+**Historial / restore**: `GET /files/{id}/versions` lista versiones; descargar una version
+antigua requiere `read`; restaurarla requiere `update` y crea una version nueva, sin borrar
+la anterior.
+
+**Admin**: `is_admin` da acceso total. `PATCH /admin/users/{id}/permissions` permite
+revocar `can_read`, `can_write` y `can_update`; el cambio se aplica en la siguiente peticion.
 
 **LogBook**: cada accion llama a `logbook.write_log(...)`; export a CSV/JSON.

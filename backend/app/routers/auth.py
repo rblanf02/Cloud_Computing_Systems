@@ -22,16 +22,17 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
         username=payload.username,
         email=payload.email,
         hashed_password=hash_password(payload.password),
-        can_read=payload.can_read,
-        can_write=payload.can_write,
-        can_update=payload.can_update,
-        is_admin=payload.is_admin,
+        can_read=True,
+        can_write=False,
+        can_update=False,
+        is_admin=False,
     )
     db.add(user)
-    db.commit()
-    db.refresh(user)
+    db.flush()
 
     write_log(db, action="REGISTER", username=user.username, resource=f"user:{user.id}")
+    db.commit()
+    db.refresh(user)
     return user
 
 
@@ -47,15 +48,15 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
             result="FAIL",
             details="Credenciales incorrectas",
         )
+        db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuario o contrasena incorrectos",
         )
 
-    token = create_access_token(
-        {"sub": user.username, "is_admin": user.is_admin}
-    )
+    token = create_access_token({"sub": user.username})
     write_log(db, action="LOGIN", username=user.username, result="OK")
+    db.commit()
     return Token(access_token=token)
 
 
@@ -67,4 +68,5 @@ def me(current_user: User = Depends(get_current_user)):
 @router.post("/logout", response_model=Message)
 def logout(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     write_log(db, action="LOGOUT", username=current_user.username, result="OK")
+    db.commit()
     return Message(detail="Sesion cerrada")

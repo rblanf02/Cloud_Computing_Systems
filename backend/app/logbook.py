@@ -19,6 +19,4 @@ def write_log(
         details=details,
     )
     db.add(event)
-    db.commit()
-    db.refresh(event)
     return event

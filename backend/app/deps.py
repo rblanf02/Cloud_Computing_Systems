@@ -3,7 +3,7 @@ from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from sqlalchemy.orm import Session
 
 from .database import get_db
-from .models import User
+from .models import File, User
 from .security import decode_token
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -51,3 +51,34 @@ def require_permission(permission: str):
         return current_user
 
     return checker
+
+
+def require_admin(current_user: User = Depends(get_current_user)) -> User:
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Se requiere administrador",
+        )
+    return current_user
+
+
+def get_owned_file(
+    db: Session,
+    file_id: int,
+    user: User,
+    *,
+    for_update: bool = False,
+) -> File:
+    query = db.query(File).filter(File.id == file_id)
+    if not user.is_admin:
+        query = query.filter(File.owner_id == user.id)
+    if for_update:
+        query = query.with_for_update()
+
+    file = query.first()
+    if file is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Fichero no encontrado",
+        )
+    return file

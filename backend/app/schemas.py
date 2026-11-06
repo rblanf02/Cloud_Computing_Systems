@@ -66,3 +66,21 @@ class Token(BaseModel):
 
 class Message(BaseModel):
     detail: str
+
+
+class FileShareCreate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    granted_to_username: str = Field(..., description="Username to grant access to")
+    access_level: str = Field(..., pattern="^(reader|editor|manager)$")
+
+class FileShareOut(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    file_id: int
+    granted_to: int
+    granted_to_username: str
+    granted_by: int
+    granted_by_username: str
+    access_level: str
+    created_at: datetime

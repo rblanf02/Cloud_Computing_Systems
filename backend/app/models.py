@@ -25,6 +25,7 @@ class User(Base):
     can_write = Column(Boolean, default=False, nullable=False)
     can_update = Column(Boolean, default=False, nullable=False)
     is_admin = Column(Boolean, default=False, nullable=False)
+    quota_bytes = Column(BigInteger, nullable=False, default=1073741824)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     files = relationship("File", back_populates="owner")
@@ -69,6 +70,7 @@ class File(Base):
     filename = Column(String(255), nullable=False)
     content_type = Column(String(100), nullable=True)
     current_version = Column(Integer, default=0, nullable=False)
+    deleted_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     owner = relationship("User", back_populates="files")
@@ -113,3 +115,16 @@ class LogEvent(Base):
     resource = Column(String(255), nullable=True)
     result = Column(String(20), nullable=False, default="OK", index=True)
     details = Column(String(500), nullable=True)
+
+class FileShare(Base):
+    __tablename__ = "file_shares"
+
+    file_id = Column(Integer, ForeignKey("files.id", ondelete="CASCADE"), primary_key=True)
+    granted_to = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), primary_key=True)
+    granted_by = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    access_level = Column(String(20), nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    file = relationship("File", backref="shares")
+    receiver = relationship("User", foreign_keys=[granted_to], backref="received_shares")
+    granter = relationship("User", foreign_keys=[granted_by], backref="given_shares")

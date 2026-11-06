@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from .config import settings
 from .database import get_db
-from .models import File, User, UserSession
+from .models import File, FileShare, User, UserSession
 from .security import decode_token
 
 bearer_scheme = HTTPBearer(auto_error=False)
@@ -123,3 +123,59 @@ def get_owned_file(
             detail="Fichero no encontrado",
         )
     return file
+
+def get_file_with_access(
+    db: Session,
+    file_id: int,
+    user: User,
+    required_level: str = "reader",
+    include_deleted: bool = False,
+    for_update: bool = False,
+) -> File:
+    """Check file ownership, trash status, and granular shared permissions."""
+    query = db.query(File).filter(File.id == file_id)
+    if for_update:
+        query = query.with_for_update()
+
+    file_row = query.first()
+    if file_row is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found",
+        )
+
+    if file_row.deleted_at is not None and not include_deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found or moved to trash",
+        )
+
+    if user.is_admin or file_row.owner_id == user.id:
+        return file_row
+
+    share = (
+        db.query(FileShare)
+        .filter(
+            FileShare.file_id == file_id,
+            FileShare.granted_to == user.id,
+        )
+        .first()
+    )
+
+    if share is None:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Access denied to this file",
+        )
+
+    hierarchy = {"reader": 1, "editor": 2, "manager": 3}
+    user_score = hierarchy.get(share.access_level, 0)
+    required_score = hierarchy.get(required_level, 1)
+
+    if user_score < required_score:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Required permission level: '{required_level}'",
+        )
+
+    return file_row

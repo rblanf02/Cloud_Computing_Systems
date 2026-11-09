@@ -6,7 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import settings
 from .database import Base, SessionLocal, engine
 from .models import User
-from .routers import admin, auth, files
+from .routers import admin, auth, files, logs
 from .security import hash_password
 
 
@@ -69,6 +69,7 @@ def create_app() -> FastAPI:
     app.include_router(auth.router)
     app.include_router(files.router)
     app.include_router(admin.router)
+    app.include_router(logs.router)
 
     @app.get("/health", tags=["health"])
     def health():

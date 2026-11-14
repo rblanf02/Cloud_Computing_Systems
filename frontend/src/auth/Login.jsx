@@ -20,9 +20,9 @@ function Login() {
     setLoading(true); //inicia que el login está en proceso
 
     try {
-      const result = await api.login(username, password); //TODO: el login actual es mockeado, cuando se implemente el backend, este método 
-      tokenService.saveAccessToken(result.access_token); //deberá hacer la llamada real al endpoint de login
-      tokenService.saveUser(result.user); //guarda la sesion y los datos del user
+      const result = await api.login(username, password);
+      tokenService.saveAccessToken(result.access_token);
+      tokenService.saveUser(result.user);
       navigate("/files");
     } catch (loginError) {
       setError(loginError.message);
@@ -52,7 +52,6 @@ function Login() {
         <p className="auth-link">
           ¿No tienes una cuenta? <Link to="/register">Registrarse</Link>
         </p>
-        <p className="demo-hint">Modo demo: puedes usar cualquier usuario y contraseña.</p>
       </section>
     </main>
   );

@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from sqlalchemy import text
 
 from .config import settings
 from .database import Base, SessionLocal, engine
@@ -34,6 +35,27 @@ def seed_admin() -> None:
         db.close()
 
 
+def ensure_schema() -> None:
+    if engine.dialect.name != "postgresql":
+        return
+
+    migrations = [
+        ("users", "quota_bytes", "BIGINT NOT NULL DEFAULT 1073741824"),
+        ("files", "deleted_at", "TIMESTAMP WITH TIME ZONE"),
+        ("file_versions", "content_type", "VARCHAR(100)"),
+        ("file_versions", "sha256", "VARCHAR(64)"),
+    ]
+
+    with engine.begin() as connection:
+        for table, column, ddl in migrations:
+            connection.execute(
+                text(
+                    f"ALTER TABLE {table} "
+                    f"ADD COLUMN IF NOT EXISTS {column} {ddl}"
+                )
+            )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     if settings.environment != "development":
@@ -45,6 +67,7 @@ async def lifespan(app: FastAPI):
             )
 
     Base.metadata.create_all(bind=engine)
+    ensure_schema()
     if settings.seed_admin:
         seed_admin()
     yield

@@ -18,7 +18,7 @@ Limites (fuera de alcance en la 1a version):
 ## 3.2 Fuentes (informacion adicional / contactos)
 
 - Documentacion oficial de Azure (Blob, Entra ID, Container Apps).
-- Documentacion de FastAPI, SQLAlchemy, Streamlit.
+- Documentacion de FastAPI, SQLAlchemy y React.
 - OWASP (seguridad), RFC 7519 (JWT), RFC 8446 (TLS).
 - Profesor de la asignatura (rúbrica y requisitos de la presentacion).
 
@@ -31,7 +31,7 @@ Limites (fuera de alcance en la 1a version):
 | Auth | JWT + bcrypt | Estandar, sencillo, control de roles. |
 | BD | PostgreSQL | Relacional, ideal para versiones y auditoria. |
 | Storage | Azure Blob + Azurite local | Versionado + emulacion local sin coste. |
-| Frontend | Streamlit | Un lenguaje, sin frontend dedicado, multi-dispositivo. |
+| Frontend | React + Vite | UI reactiva y responsive, multi-dispositivo. |
 | Contenedores | Docker + Compose | Requisito del profesor; entorno reproducible. |
 | CI/CD | GitHub Actions | Automatizacion de tests. |
 

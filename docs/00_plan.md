@@ -8,7 +8,7 @@ Sistema de intercambio de ficheros entre aplicaciones (PC/tablet/movil) y la nub
 |---|---|---|
 | Cloud | **Azure** | Credito Azure for Students sin tarjeta; Entra ID facilita auth; Blob versioning cubre el "muy buena nota"; SDK Python de primera. |
 | Backend | **FastAPI (Python)** | Equipo con perfil de datos: Python es su lenguaje fuerte; genera OpenAPI/Swagger automatico; minimo boilerplate. |
-| Frontend | **Streamlit** | Un solo lenguaje, sin especialista en frontend, accesible desde navegador en los 3 dispositivos. |
+| Frontend | **React + Vite** | UI reactiva y responsive, accesible desde navegador en los 3 dispositivos. |
 | Auth | **JWT propio** | Menos configuracion que Entra ID; control total de roles para el rubro. Entra ID queda como mejora opcional. |
 | Storage local | **Azurite** | Emula Azure Blob en local: se programa contra la API real sin gastar credito. |
 | BD | **PostgreSQL** | Relacional, ideal para versiones y LogBook; disponible en Azure. |

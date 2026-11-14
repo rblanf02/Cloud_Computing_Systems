@@ -1,7 +1,9 @@
+from hashlib import sha256
+
 from app.config import settings
 from app.main import app as fastapi_app
 from app.models import File as FileModel
-from app.models import User
+from app.models import LogEvent, User
 from app.security import hash_password
 from app.storage import InMemoryStorage, get_storage
 
@@ -9,6 +11,11 @@ from app.storage import InMemoryStorage, get_storage
 class FailingStorage(InMemoryStorage):
     def upload(self, blob_name: str, data: bytes, content_type: str | None) -> None:
         raise RuntimeError("fallo simulado del storage")
+
+
+class CorruptStorage(InMemoryStorage):
+    def download(self, blob_name: str) -> bytes:
+        return b"contenido corrupto"
 
 
 def _create_user(
@@ -371,3 +378,45 @@ def test_restore_requires_update_permission(client, db_session, storage):
         headers=_auth(token),
     )
     assert response.status_code == 403
+
+
+def test_version_store_and_expose_sha256(client, db_session, storage):
+    _create_user(db_session, "hasher1", can_write=True, can_update=True)
+    token = _login(client, "hasher1")
+
+    upload = _upload_new(client, token, "hash.txt", b"contenido", "text/plain")
+    assert upload.status_code == 201
+    file_id = upload.json()["id"]
+
+    assert _upload_version(client, token, file_id, b"contenido", "text/plain").status_code == 201
+
+    versions = client.get(f"/files/{file_id}/versions", headers=_auth(token))
+    assert versions.status_code == 200
+    assert versions.json()[0]["sha256"] == sha256(b"contenido").hexdigest()
+    assert versions.json()[1]["sha256"] == sha256(b"contenido").hexdigest()
+
+
+def test_download_detects_integrity_failure(client, db_session, storage):
+    _create_user(db_session, "integrity1", can_write=True)
+    token = _login(client, "integrity1")
+
+    upload = _upload_new(client, token, "integridad.txt", b"original", "text/plain")
+    assert upload.status_code == 201
+    file_id = upload.json()["id"]
+
+    fastapi_app.dependency_overrides[get_storage] = lambda: CorruptStorage()
+    try:
+        response = client.get(f"/files/{file_id}/download", headers=_auth(token))
+        assert response.status_code == 502
+        assert response.json()["detail"] == "File integrity check failed"
+    finally:
+        fastapi_app.dependency_overrides.pop(get_storage, None)
+
+    db_session.expire_all()
+    event = (
+        db_session.query(LogEvent)
+        .filter(LogEvent.action == "INTEGRITY_FAIL")
+        .first()
+    )
+    assert event is not None
+    assert event.result == "FAIL"

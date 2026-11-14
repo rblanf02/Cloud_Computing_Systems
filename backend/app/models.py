@@ -91,6 +91,7 @@ class FileVersion(Base):
     file_id = Column(Integer, ForeignKey("files.id"), nullable=False)
     version_number = Column(Integer, nullable=False)
     size_bytes = Column(BigInteger, nullable=False, default=0)
+    sha256 = Column(String(64), nullable=True)
     content_type = Column(String(100), nullable=True)
     blob_name = Column(String(500), nullable=False)
     created_by = Column(Integer, ForeignKey("users.id"), nullable=False)

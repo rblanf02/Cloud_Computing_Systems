@@ -89,14 +89,13 @@ cientifico-de-datos, 1 desarrollador de software, 1 de telecomunicaciones):
 > AWS seria igualmente valido (S3 con versioning nativo). Migrar seria cambiar la
 > capa de almacenamiento a `boto3`/S3.
 
-### 3.2 Stack: **Python de punta a punta**
+### 3.2 Stack: **backend Python + frontend React**
 
-El criterio fue **el stack mas sencillo para el equipo**:
+El criterio fue **el stack mas adecuado para el equipo**:
 - **Backend FastAPI**: Python es el lenguaje fuerte del equipo; genera documentacion
   OpenAPI/Swagger automatica (ideal para repartir trabajo); minimo boilerplate.
-- **Frontend Streamlit**: un unico lenguaje; no hace falta especialista en frontend;
-  accesible desde el navegador en PC, tablet y movil (cubre "computer, tablet,
-  smartphone" con un solo desarrollo).
+- **Frontend React + Vite**: UI reactiva y responsive; se sirve como estatico detras de
+  nginx y funciona en PC, tablet y movil (cubre "computer, tablet, smartphone").
 - **Autenticacion JWT propia** (en vez de Entra ID) para el MVP: menos configuracion
   externa y control total de los roles. Entra ID queda como mejora opcional.
 
@@ -115,7 +114,7 @@ El criterio fue **el stack mas sencillo para el equipo**:
 | Validacion/config | Pydantic + pydantic-settings | Validacion de datos y variables de entorno |
 | Almacenamiento de objetos | **Azure Blob Storage** (prod) / **Azurite** (local) | Versionado + emulacion local sin coste |
 | SDK de storage | azure-storage-blob | Cliente oficial de Azure |
-| Frontend | **javascript** | .... |
+| Frontend | **React + Vite** | UI reactiva, responsive y sin backend acoplado |
 | Contenedores | **Docker** + **docker-compose** | Entorno reproducible (requisito del profesor) |
 | Proxy / TLS local | Nginx + certificado autofirmado | HTTPS en local |
 | CI/CD | **GitHub Actions** | Ejecuta tests automaticamente |
@@ -131,8 +130,8 @@ El criterio fue **el stack mas sencillo para el equipo**:
               v                                          v
    LOCAL (docker-compose)                      AZURE (produccion)
    +-----------+     +----------+              +----------------+   SAS   +----------------+
-   | Streamlit |---->| FastAPI  |----+         | Container Apps |-------->| Blob Storage   |
-   | frontend  |     | backend  |    |         |   (API)        |         | + versioning   |
+   | React +   |---->| FastAPI  |----+         | Container Apps |-------->| Blob Storage   |
+   | Vite      |     | backend  |    |         |   (API)        |         | + versioning   |
    +-----------+     +----------+    |         +----------------+         +----------------+
          |                |          |                 |
          |                v          v                 v
@@ -146,8 +145,9 @@ El criterio fue **el stack mas sencillo para el equipo**:
 
 ### 5.1 Componentes y su relacion
 
-1. **Frontend (Streamlit)** - Interfaz de usuario. Se comunica **solo** con el
-   backend por HTTP(S). Muestra login, listado, subida, descarga y el LogBook.
+1. **Frontend (React + Vite)** - Interfaz de usuario. Se comunica **solo** con el
+   backend por HTTP(S). Muestra login, ficheros propios, compartidos, papelera, LogBook
+   y administracion.
 2. **Backend (FastAPI)** - El "cerebro". Recibe las peticiones, **autentica**
    (comprueba el JWT), **autoriza** (comprueba permisos), y coordina el resto:
    - Habla con **PostgreSQL** para usuarios, metadatos, versiones y logbook.
@@ -179,12 +179,19 @@ id (PK)                       id (PK)                       id (PK)
 username (unique)             owner_id (FK -> users.id)     file_id (FK -> files.id)
 email                         filename                      version_number
 hashed_password               content_type                  size_bytes
-can_read  (bool)              created_at                    blob_name
-can_write (bool)              current_version               created_at
-can_update(bool)                                            created_by (FK -> users.id)
-is_admin  (bool)
-created_at                    |                             |
-                              +--- 1:N --- file_versions
+can_read  (bool)              current_version               sha256
+can_write (bool)              deleted_at (soft delete)      content_type
+can_update(bool)              created_at                    blob_name
+is_admin  (bool)                                            created_by (FK -> users.id)
+quota_bytes (bigint)          |                             created_at
+created_at                    +--- 1:N --- file_versions
+                              +--- 1:N --- file_shares
+
+file_shares
+-----------
+file_id (PK, FK -> files.id) | granted_to (PK, FK -> users.id)
+granted_by (FK -> users.id)  | access_level (reader|editor|manager)
+created_at
 
 log_events
 ----------
@@ -194,6 +201,7 @@ id (PK) | timestamp | username | action | resource | result | details
 Relaciones:
 - `users 1:N files` (un usuario tiene muchos ficheros).
 - `files 1:N file_versions` (un fichero tiene muchas versiones).
+- `files 1:N file_shares` (un fichero puede compartirse con varios usuarios).
 - `log_events` es independiente: registra eventos de cualquier usuario/accion.
 
 ---
@@ -202,22 +210,30 @@ Relaciones:
 
 | Metodo | Ruta | Permiso | Descripcion |
 |---|---|---|---|
-| POST | `/auth/register` | publico | Crea un usuario. |
+| POST | `/auth/register` | publico | Crea un usuario con los tres permisos activos. |
 | POST | `/auth/login` | publico | Crea una sesion y devuelve un JWT con `sid`. |
 | POST | `/auth/logout` | autenticado | Revoca la sesion actual. |
 | GET | `/auth/me` | autenticado | Datos del usuario actual. |
 | GET | `/files` | read | Lista los ficheros del usuario con su ultima version. |
 | POST | `/files/upload` | write | Crea un fichero nuevo (409 si ya existe el nombre). |
 | POST | `/files/{id}/versions` | update | Sube una version nueva de un fichero existente. |
-| GET | `/files/{id}/download` | read | Descarga la ultima version. |
-| GET | `/files/{id}/versions` | read | Historial de versiones. |
+| GET | `/files/{id}/download` | read | Descarga la ultima version y verifica SHA-256. |
+| GET | `/files/{id}/versions` | read | Historial de versiones con SHA-256 y autor. |
 | GET | `/files/{id}/versions/{v}/download` | read | Descarga una version concreta. |
 | POST | `/files/{id}/versions/{v}/restore` | update | Restaura una version como version nueva. |
+| DELETE | `/files/{id}` | owner | Mueve el fichero a la papelera. |
+| POST | `/files/{id}/restore` | owner | Restaura desde la papelera. |
+| DELETE | `/files/{id}/permanent` | owner | Borra fichero, versiones y blobs. |
+| GET | `/files/{id}/shares` | owner/manager | Lista accesos concedidos. |
+| POST | `/files/{id}/share` | owner/manager | Comparte con `reader`, `editor` o `manager`. |
+| DELETE | `/files/{id}/share/{user_id}` | owner/manager | Revoca un acceso. |
+| GET | `/files/shared` | autenticado | Ficheros compartidos conmigo. |
+| GET | `/files/trash` | autenticado | Papelera propia. |
 | GET | `/admin/users` | admin | Lista usuarios y permisos. |
 | PATCH | `/admin/users/{id}/permissions` | admin | Cambia `can_read`, `can_write` y `can_update`. |
 | GET | `/admin/files` | admin | Lista todos los ficheros. |
 | GET | `/logs` | read | Lista eventos (propios; admin ve todos). |
-| GET | `/logs/export?fmt=csv\|json` | read | Exporta el LogBook. |
+| GET | `/logs/export?fmt=csv\|json` | read | Exporta el LogBook visible. |
 | GET | `/health` | publico | Comprobacion de estado. |
 
 > FastAPI genera automaticamente la documentacion de esta API en `/docs`
@@ -246,19 +262,32 @@ Relaciones:
 2. El backend comprueba el permiso `write`.
 3. Si ya existe ese nombre para el usuario, responde `409`.
 4. Crea la fila en `files`, sube el blob `owner/{file_id}/v1` e inserta `file_versions`.
-5. Registra `UPLOAD_NEW` en el LogBook.
+5. Calcula y guarda el **SHA-256** del contenido.
+6. Registra `UPLOAD_NEW` en el LogBook.
 
 **Nueva version**
 1. El usuario sube el fichero a `POST /files/{id}/versions`.
-2. El backend comprueba el permiso `update` y que el fichero es suyo (o es admin).
+2. El backend comprueba el permiso `update` y que el fichero es suyo, es admin o tiene
+   share de `editor`/`manager`.
 3. Bloquea la fila de `files`, calcula `n = current_version + 1` y sube el blob.
-4. Inserta `file_versions` y actualiza `current_version`.
+4. Inserta `file_versions` con su **SHA-256** y actualiza `current_version`.
 5. Registra `UPLOAD_VERSION` en el LogBook.
 
 **Download**
-1. El backend comprueba el permiso `read`.
+1. El backend comprueba el permiso `read` y el acceso (propietario, admin o share).
 2. Descarga el contenido del blob de la version pedida.
-3. Registra `DOWNLOAD` en el LogBook y lo devuelve.
+3. Calcula el SHA-256 y lo compara con el guardado. Si no coincide responde `502`,
+   registra `INTEGRITY_FAIL` y no entrega el contenido.
+4. Registra `DOWNLOAD` en el LogBook y lo devuelve.
+
+**Comparticion**
+- `reader` puede listar y descargar; `editor` ademas sube versiones; `manager` ademas
+  concede y revoca shares.
+- Un usuario sin share recibe `404` para no revelar si el fichero existe.
+
+**Papelera**
+- `DELETE /files/{id}` marca `deleted_at`; se puede restaurar o borrar definitivamente.
+- El borrado definitivo elimina metadatos, versiones y blobs.
 
 **List**
 1. El backend lee los ficheros del usuario y su ultima version.
@@ -266,7 +295,8 @@ Relaciones:
 
 **LogBook**
 - Cada accion llama a un unico helper `write_log(...)`.
-- Se puede exportar todo el historial a **CSV** o **JSON**.
+- `/logs` filtra por usuario; el admin ve todos.
+- Se puede exportar el historial visible a **CSV** o **JSON**.
 
 ---
 
@@ -347,7 +377,7 @@ PostgreSQL Flexible Server + Container Registry + certificado gestionado HTTPS.
 |---|---|---|---|
 | **Jose** | Lead tecnico + Auth | Login/logout, JWT, permisos, API base | Modulos de auth, contrato OpenAPI, tests |
 | **Ruben** | Storage + Versionado | Subir/descargar/listar, versionado | Capa de almacenamiento, endpoints de ficheros |
-| **Maria** | Frontend | UI multi-dispositivo | App Streamlit (login, listar, subir, descargar) |
+| **Maria** | Frontend | UI multi-dispositivo | App React + Vite (ficheros, compartidos, papelera, logs, admin) |
 | **Diego** | Cloud / DevOps | Docker, Azure, HTTPS, CI/CD | docker-compose, despliegue, TLS, pipeline |
 | **Nico** | Datos + LogBook + QA | Esquema BD, LogBook, pruebas, seguridad | Modelo ER, logbook+export, tests, checklist |
 
@@ -363,14 +393,14 @@ PostgreSQL Flexible Server + Container Registry + certificado gestionado HTTPS.
 |---|---|---|
 | Jose | Login/JWT + `/auth/me` + tests | Probar en `/docs` |
 | Ruben | Storage + subir/descargar 3 versiones | Script contra Azurite |
-| Maria | UI completa con datos de prueba (mock) | `streamlit run` |
+| Maria | UI completa contra API o datos simulados | `npm run dev` |
 | Diego | `docker compose up` + Nginx TLS + CI | `curl -k https://localhost:8443` |
 | Nico | ER + datos de prueba + export CSV/JSON | Ejecutar seed + export |
 
 ### 13.5 Hitos de integracion
 
 1. **H1**: contratos (ER + OpenAPI) y docker-compose funcionando.
-2. **H2**: auth + storage + logbook integrados; Maria pasa de mock a API real.
+2. **H2**: auth + storage + logbook integrados; Maria conecta el frontend a la API real.
 3. **H3**: pruebas + seguridad + versionado validado.
 4. **H4**: despliegue en Azure + HTTPS + demo.
 5. **H5**: presentacion final.
@@ -495,7 +525,8 @@ que es lo que pide el enunciado. Nextcloud es la referencia mas cercana en filos
 - **PostgreSQL**: base de datos relacional.
 - **ORM (SQLAlchemy)**: capa que traduce entre objetos Python y tablas SQL.
 - **FastAPI / Uvicorn**: framework web de Python / su servidor.
-- **Streamlit**: libreria para crear interfaces web en Python.
+- **Streamlit**: ya no se usa; el frontend elegido es **React + Vite**.
+- **React**: libreria para construir la interfaz web por componentes.
 - **Docker / docker-compose**: empaquetado en contenedores / orquestacion local.
 - **TLS/HTTPS**: cifrado del trafico en red.
 - **LogBook**: registro/auditoria de accesos y operaciones.
@@ -542,21 +573,20 @@ que es lo que pide el enunciado. Nextcloud es la referencia mas cercana en filos
 |---|---|---|
 | `db` | PostgreSQL | 5432 |
 | `azurite` | Emulador de Azure Blob (local) | 10000 |
-| `backend` | API FastAPI | 8000 |
-| `frontend` | App Streamlit | 8501 |
-| `nginx` | Proxy HTTPS (opcional) | 8443 |
+| `backend` | API FastAPI | interno 8000 (via nginx) |
+| `frontend` | App React + Vite servida por nginx | 8443 (via nginx) |
+| `nginx` | Proxy HTTPS | 8443 |
 
 ### Comandos que usareis todo el rato
 
 ```powershell
 docker compose up --build        # levanta todo (y reconstruye imagenes)
-docker compose up -d             # en segundo plano (no ocupa la terminal)
+docker compose up -d             # levantar todo en segundo plano
 docker compose logs -f backend   # ver logs de un servicio en vivo
 docker compose ps                # ver que contenedores estan corriendo
 docker compose exec backend bash # entrar "dentro" de un contenedor
 docker compose down              # parar y borrar contenedores (los datos se guardan)
 docker compose down -v           # parar y BORRAR tambien los datos (volumenes)
-docker compose --profile tls up  # levantar tambien el nginx con HTTPS
 ```
 
 ## 23. Las 5 cosas que MAS confunden al principio
@@ -564,7 +594,7 @@ docker compose --profile tls up  # levantar tambien el nginx con HTTPS
 1. **`localhost` NO es lo mismo que el nombre del servicio.** Dentro de la red de
    Docker, el backend encuentra la base de datos en `db` y el emulador en `azurite`
    (por eso en `.env` la URL es `...@db:5432/...`). Desde **tu navegador**, en cambio,
-   si es `localhost:8501`. Confundirlo es el error numero 1.
+   si es `localhost:8443`. Confundirlo es el error numero 1.
 2. **`up` vs `up --build`.** Si cambias el codigo o `requirements.txt`, no basta con
    reiniciar: hay que reconstruir (`--build`).
 3. **`down` NO borra datos, `down -v` SI.** Los volumenes (`pgdata`, `azurite`) hacen
@@ -599,29 +629,39 @@ docker compose --profile tls up  # levantar tambien el nginx con HTTPS
 
 ## 26. Check-list para probar en local (antes de la nube)
 
-1. `docker compose up --build` y comprobar que los 4 contenedores estan "healthy".
-2. Abrir `http://localhost:8000/docs` (Swagger) y probar login con el usuario y la
+1. `docker compose up --build` y comprobar que los contenedores estan "healthy".
+2. Abrir `https://localhost:8443/docs` (Swagger) y probar login con el usuario y la
    contrasena configurados en `SEED_ADMIN_USERNAME` y `SEED_ADMIN_PASSWORD` del `.env`.
 3. Crear un fichero con `POST /files/upload` y subir **2 versiones** mas por
    `POST /files/{id}/versions` -> deben aparecer **3 versiones**.
-4. Descargar la version 1 y la 3 -> comprobar que el contenido es el correcto.
+4. Descargar la version 1 y la 3 -> comprobar que el contenido es el correcto y que el
+   SHA-256 mostrado coincide con el calculado.
 5. Restaurar la version 1 -> debe crear la version 4 con el contenido original.
-6. Abrir `http://localhost:8501`, probar login, crear, versionar y descargar desde la UI.
+6. Abrir `https://localhost:8443`, probar login, crear, versionar, compartir y descargar
+   desde la UI.
 7. Ver el **LogBook** y exportarlo a **CSV** y **JSON**.
 8. Probar con **un usuario sin permiso de escritura** -> debe recibir un error 403.
 9. Entrar como admin, listar todos los ficheros y revocar un permiso.
-10. Probar en el **navegador del movil** (misma wifi, IP del PC en vez de localhost).
+10. Compartir un fichero con otro usuario (`reader`), comprobarlo en "Compartidos" y
+    revocar el acceso -> debe volver a responder `404`.
+11. Mover un fichero a la papelera, restaurarlo y borrarlo definitivamente.
+12. Probar en el **navegador del movil** (misma wifi, IP del PC en vez de localhost);
+    instalar antes `infra/nginx/certs/rootCA.pem` en el dispositivo.
 
 > Probar TODO en local primero. El 70% de los problemas se resuelven aqui y sin gastar
 > credito de Azure.
 
 ## 27. HTTPS: que esperar
 
-- En **local** se usa un certificado **autofirmado**: el navegador mostrara un aviso
-  de "conexion no segura". **Es normal**; se acepta y se continua.
+- En **local** se usa un certificado generado con **mkcert** e instalado en el almacen
+  de confianza: el navegador del PC no muestra avisos.
+- Para tablet/movil hay que instalar `infra/nginx/certs/rootCA.pem` como CA de confianza
+  en el dispositivo.
 - En **produccion (Azure)** se usa un certificado **real gestionado**: sin avisos.
-- Generar el certificado local (si usais el perfil `tls`):
-  `powershell -ExecutionPolicy Bypass -File infra/nginx/gen-cert.ps1`.
+- Generar el certificado local:
+  `powershell -ExecutionPolicy Bypass -File infra/nginx/gen-cert.ps1 -Ip <IP_LAN>`.
+- `curl.exe` en Windows puede fallar por la revocacion de Schannel; usar
+  `curl.exe --ssl-no-revoke https://localhost:8443/health`.
 
 ## 28. Azure sin sustos (ni sustos en la factura)
 

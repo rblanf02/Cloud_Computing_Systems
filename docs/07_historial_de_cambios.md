@@ -35,6 +35,8 @@
 
 | Fecha | Autor | Tipo | Resumen | Commit |
 |---|---|---|---|---|
+| 2026-11-14 | Jose (JoseParedes) | frontend + backend + infra + docs | Frontend React completo, comparticion, SHA-256, papelera, LogBook y HTTPS de confianza | (pendiente) |
+| 2026-11-13 | Jose (JoseParedes) | infra + frontend | HTTPS local con nginx en 8443 y cierre de puertos directos | (pendiente) |
 | 2026-11-03 | Jose (JoseParedes) | backend + docs + tests | P3: sesiones con idle timeout de 10 min y logout real | (pendiente) |
 | 2026-11-03 | Jose (JoseParedes) | backend + docs + tests | P2: permisos de 3 niveles, versionado explícito, historial/restore y admin | (pendiente) |
 | 2026-11-03 | Jose (JoseParedes) | backend + config | P1: storage Azure/Azurite, versionado, upload/list/download y tests | (pendiente) |
@@ -46,6 +48,86 @@
 ---
 
 ## 2. Detalle de los cambios
+
+### [2026-11-14] Frontend completo, comparticion, SHA-256 y HTTPS de confianza - Jose
+- **Autor**: Jose Paredes (@JoseParedes)
+- **Archivos/Areas**:
+  - `frontend/src/services/api.js`
+  - `frontend/src/files/` (`FileCard`, `FileList`, `SharedFiles`, `Trash`, `ShareModal`, `VersionsModal`)
+  - `frontend/src/admin/` (`AdminUsers`, `AdminFiles`)
+  - `frontend/src/logs/LogBook.jsx`
+  - `frontend/src/auth/` (`Login`, `Register`)
+  - `frontend/src/components/AppNavbar.jsx`, `frontend/src/PrivateRoute.jsx`, `frontend/src/App.jsx`
+  - `frontend/src/styles/app.css`
+  - `frontend/vite.config.js`, `frontend/Dockerfile`, `frontend/.dockerignore`, `frontend/nginx.conf`
+  - `backend/app/routers/files.py`, `backend/app/routers/logs.py`, `backend/app/routers/auth.py`
+  - `backend/app/deps.py`, `backend/app/models.py`, `backend/app/schemas.py`, `backend/app/main.py`
+  - `backend/tests/test_auth.py`, `backend/tests/test_files.py`, `backend/tests/test_shares.py` (nuevo), `backend/tests/test_logs.py` (nuevo)
+  - `.env`, `.env.example`, `docker-compose.yml`, `README.md`
+  - `docs/00_plan.md`, `docs/01_problem_statement.md`, `docs/03_specifications.md`,
+    `docs/04_architecture.md`, `docs/05_division_of_work.md`, `docs/06_backend_explicado.md`,
+    `docs/PROYECTO_COMPLETO.md`, `docs/07_historial_de_cambios.md`
+- **Que se hizo**:
+  - Se sustituyo el frontend de demostracion por una app **React + Vite** conectada a la
+    API real: login/registro, ficheros, versiones, compartidos, papelera, LogBook y admin.
+  - El registro publico crea usuarios con `can_read`, `can_write` y `can_update` activos;
+    el admin puede revocarlos desde la nueva pantalla de usuarios.
+  - Se anadio **comparticion** con niveles `reader`, `editor` y `manager`, listado de
+    shares y revocacion. Un usuario sin acceso recibe `404` para no filtrar existencia.
+  - Se calcula y guarda **SHA-256 por version**, se muestra en la UI y se verifica en cada
+    descarga; una discrepancia responde `502` y registra `INTEGRITY_FAIL`.
+  - Se anadio papelera: borrado logico, restauracion y borrado definitivo con sus blobs.
+  - `/logs` filtra por usuario (el admin ve todo) y el export CSV/JSON usa el mismo filtro.
+  - `ensure_schema()` aplica migraciones aditivas (`quota_bytes`, `deleted_at`,
+    `content_type`, `sha256`) para que el volumen de PostgreSQL existente siga funcionando.
+  - HTTPS local con **mkcert**: certificado de confianza para `localhost`, `127.0.0.1` y
+    la IP de LAN; se copia `rootCA.pem` para instalarlo en tablet/movil.
+  - Vite usa proxy en desarrollo y el Dockerfile recibe `VITE_API_BASE` como build arg;
+    se eliminan las pistas de modo demo.
+  - **Correccion** de la nota de P2: ahora si existe comparticion entre usuarios y tabla
+    `file_shares`; el admin mantiene bypass total.
+- **Por que**: completar el alcance local (sin Azure) con todas las capacidades pedidas:
+  permisos revocables, versionado con integridad, comparticion, papelera, LogBook y HTTPS.
+- **Como probarlo**:
+  ```powershell
+  docker compose up -d db azurite
+  docker compose run --rm backend pytest -q
+  cd frontend; npm ci; npm run build
+  docker compose up -d --build
+  curl.exe --ssl-no-revoke https://localhost:8443/health
+  ```
+  Resultado: `42 passed`; build de Vite correcto; health `{"status":"ok"}` y flujo E2E
+  registro/login/upload/version/share/download/revoke/export probado por HTTPS.
+
+### [2026-11-13] HTTPS local con nginx - Jose
+- **Autor**: Jose Paredes (@JoseParedes)
+- **Archivos/Areas**:
+  - `infra/nginx/default.conf` (nuevo)
+  - `infra/nginx/gen-cert.ps1` (nuevo)
+  - `infra/nginx/certs/` (certificado local, no versionado)
+  - `frontend/nginx.conf` (nuevo)
+  - `frontend/Dockerfile`
+  - `frontend/src/services/api.js`
+  - `docker-compose.yml`
+  - `README.md`
+- **Que se hizo**:
+  - Se anadio un proxy inverso nginx con TLS en el puerto `8443` como unico punto de
+    entrada; el resto de servicios dejan de publicar puertos al host.
+  - nginx sirve el frontend y redirige `/auth`, `/files`, `/logs`, `/admin`, `/health`,
+    `/docs` y `/openapi.json` al backend.
+  - Se configuro `client_max_body_size 10m` para permitir las subidas permitidas por el
+    backend y cabeceras `X-Forwarded-*`.
+  - El frontend usa rutas relativas (`VITE_API_BASE` vacio) para evitar mixed content.
+  - Se anadio `frontend/nginx.conf` con fallback a `index.html` para React Router.
+  - Se anadio `gen-cert.ps1`, que genera el certificado con mkcert, OpenSSL o Docker.
+- **Por que**: cubrir el requisito de transferencia de ficheros por HTTPS en local.
+- **Como probarlo**:
+  ```powershell
+  powershell -ExecutionPolicy Bypass -File infra/nginx/gen-cert.ps1
+  docker compose up --build
+  curl.exe -k https://localhost:8443/health
+  ```
+  Abrir `https://localhost:8443` y comprobar que `http://localhost:8000` ya no responde.
 
 ### [2026-11-03] P3: sesiones con inactividad y logout real - Jose
 - **Autor**: Jose Paredes (@JoseParedes)

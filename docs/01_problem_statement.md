@@ -19,7 +19,7 @@ y manteniendo un registro de auditoria.
 
 ## Approach (como se resuelve, brevemente)
 
-- App web responsive (Streamlit) que funciona en cualquier navegador -> cubre PC,
+- App web responsive (React) que funciona en cualquier navegador -> cubre PC,
   tablet y movil con un solo desarrollo.
 - API REST en FastAPI sobre HTTPS que centraliza autenticacion y autorizacion.
 - Ficheros almacenados en Azure Blob Storage, con versionado: cada subida genera

@@ -1,9 +1,14 @@
 import { Navigate } from "react-router-dom";
 import tokenService from "./services/token.service";
 
-function PrivateRoute({ children }) {
-  if (!tokenService.getLocalAccessToken()) { //si el usuario no tiene un token de acceso, lo redirige a la página de login (protege las rutas privadas)
+function PrivateRoute({ children, adminOnly = false }) {
+  if (!tokenService.getLocalAccessToken()) {
     return <Navigate to="/login" replace />;
+  }
+
+  const user = tokenService.getUser();
+  if (adminOnly && !user?.is_admin) {
+    return <Navigate to="/files" replace />;
   }
 
   return children;

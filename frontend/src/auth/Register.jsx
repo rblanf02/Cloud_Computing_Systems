@@ -60,7 +60,6 @@ function Register() {
         <p className="auth-link">
           ¿Ya tienes una cuenta? <Link to="/login">Iniciar sesión</Link>
         </p>
-        <p className="demo-hint">En el backend real se validarán usuario, email y contraseña.</p>
       </section>
     </main>
   );

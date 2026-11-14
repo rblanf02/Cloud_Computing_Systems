@@ -56,8 +56,8 @@ def test_register_default_permissions(client):
     assert response.status_code == 201
     data = response.json()
     assert data["can_read"] is True
-    assert data["can_write"] is False
-    assert data["can_update"] is False
+    assert data["can_write"] is True
+    assert data["can_update"] is True
     assert data["is_admin"] is False
 
 

@@ -1,4 +1,5 @@
 from datetime import datetime, timezone
+from hashlib import sha256
 from urllib.parse import quote
 
 from fastapi import (
@@ -20,7 +21,7 @@ from ..deps import get_file_with_access, get_owned_file, require_permission
 from ..logbook import write_log
 from ..models import File as FileModel
 from ..models import FileShare, FileVersion, User
-from ..schemas import FileOut, FileShareCreate, FileVersionOut
+from ..schemas import FileOut, FileShareCreate, FileShareOut, FileVersionOut
 from ..storage import Storage, get_storage
 
 router = APIRouter(prefix="/files", tags=["files"])
@@ -48,7 +49,9 @@ def _delete_blob(storage: Storage, blob_name: str) -> None:
         pass
 
 
-def _file_out(db: Session, file: FileModel) -> FileOut:
+def _file_out(
+    db: Session, file: FileModel, access_level: str | None = None
+) -> FileOut:
     version = (
         db.query(FileVersion)
         .filter(
@@ -67,6 +70,7 @@ def _file_out(db: Session, file: FileModel) -> FileOut:
         size_bytes=version.size_bytes if version else 0,
         version_created_at=version.created_at if version else file.created_at,
         created_at=file.created_at,
+        access_level=access_level,
     )
 
 
@@ -75,10 +79,50 @@ def _version_out(version: FileVersion) -> FileVersionOut:
         id=version.id,
         version_number=version.version_number,
         size_bytes=version.size_bytes,
+        sha256=version.sha256,
         content_type=version.content_type,
         created_at=version.created_at,
         created_by=version.created_by,
         created_by_username=version.created_by_user.username,
+    )
+
+
+def _share_out(share: FileShare) -> FileShareOut:
+    return FileShareOut(
+        file_id=share.file_id,
+        granted_to=share.granted_to,
+        granted_to_username=share.receiver.username,
+        granted_by=share.granted_by,
+        granted_by_username=share.granter.username,
+        access_level=share.access_level,
+        created_at=share.created_at,
+    )
+
+
+def _verify_integrity(
+    db: Session,
+    version: FileVersion,
+    data: bytes,
+    username: str,
+    resource: str,
+) -> None:
+    if not version.sha256:
+        return
+    if sha256(data).hexdigest() == version.sha256:
+        return
+
+    write_log(
+        db,
+        action="INTEGRITY_FAIL",
+        username=username,
+        resource=resource,
+        result="FAIL",
+        details="Downloaded content does not match stored SHA-256",
+    )
+    db.commit()
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="File integrity check failed",
     )
 
 
@@ -133,6 +177,7 @@ def _store_version(
                 file_id=file_row.id,
                 version_number=version_number,
                 size_bytes=len(data),
+                sha256=sha256(data).hexdigest(),
                 content_type=content_type,
                 blob_name=blob_name,
                 created_by=user_id,
@@ -336,6 +381,14 @@ def download_file(
             detail="Could not download file",
         )
 
+    _verify_integrity(
+        db,
+        version,
+        data,
+        current_user.username,
+        f"file:{file_row.id}/v{file_row.current_version}",
+    )
+
     write_log(
         db,
         action="DOWNLOAD",
@@ -426,6 +479,14 @@ def download_version(
             status_code=status.HTTP_502_BAD_GATEWAY,
             detail="Could not download version",
         )
+
+    _verify_integrity(
+        db,
+        version,
+        data,
+        current_user.username,
+        f"file:{file_row.id}/v{version_number}",
+    )
 
     write_log(
         db,
@@ -563,6 +624,35 @@ def restore_file(
     return {"detail": "File restored successfully"}
 
 
+@router.get("/{file_id}/shares", response_model=list[FileShareOut])
+def list_file_shares(
+    file_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("read")),
+):
+    file_row = get_file_with_access(
+        db, file_id, current_user, required_level="manager"
+    )
+
+    shares = (
+        db.query(FileShare)
+        .filter(FileShare.file_id == file_row.id)
+        .order_by(FileShare.created_at)
+        .all()
+    )
+
+    result = [_share_out(share) for share in shares]
+
+    write_log(
+        db,
+        action="LIST_SHARES",
+        username=current_user.username,
+        resource=f"file:{file_row.id}",
+    )
+    db.commit()
+    return result
+
+
 @router.post("/{file_id}/share", status_code=status.HTTP_201_CREATED)
 def share_file(
     file_id: int,
@@ -675,7 +765,14 @@ def list_shared_files(
         .all()
     )
 
-    result = [_file_out(db, file) for file in files]
+    shares = {
+        share.file_id: share.access_level
+        for share in db.query(FileShare)
+        .filter(FileShare.granted_to == current_user.id)
+        .all()
+    }
+
+    result = [_file_out(db, file, shares.get(file.id)) for file in files]
 
     write_log(
         db,

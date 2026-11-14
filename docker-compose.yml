@@ -34,27 +34,22 @@ services:
         condition: service_healthy
       azurite:
         condition: service_started
-    ports:
-      - "8000:8000"
     volumes:
       - ./backend:/app
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        VITE_API_BASE: ""
     env_file: .env
-    environment:
-      API_BASE: http://backend:8000
     depends_on:
       - backend
-    ports:
-      - "8501:8501"
-    volumes:
-      - ./frontend:/app
 
-  # Proxy HTTPS opcional. Activar con: docker compose --profile tls up
+  # Punto de entrada HTTPS. Generar antes el certificado con:
+  #   powershell -ExecutionPolicy Bypass -File infra/nginx/gen-cert.ps1 -Ip <IP_LAN>
   nginx:
     image: nginx:1.27-alpine
-    profiles: ["tls"]
     volumes:
       - ./infra/nginx/default.conf:/etc/nginx/conf.d/default.conf:ro
       - ./infra/nginx/certs:/etc/nginx/certs:ro

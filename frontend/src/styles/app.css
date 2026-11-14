@@ -6,7 +6,7 @@
 
 * { box-sizing: border-box; }
 body { margin: 0; min-width: 320px; background: #f5f7fb; }
-button, input { font: inherit; }
+button, input, select { font: inherit; }
 button { cursor: pointer; }
 .hidden, .visually-hidden { display: none; }
 .muted { color: #64748b; line-height: 1.5; }
@@ -24,7 +24,6 @@ input { width: 100%; padding: 11px 12px; border: 1px solid #cbd5e1; border-radiu
 .button-secondary { color: #334155; background: #eef2f7; }
 .button-danger { color: #dc2626; background: #fef2f2; }
 .button-full { width: 100%; margin-top: 25px; padding: 12px; }
-.demo-hint { color: #64748b; font-size: .78rem; text-align: center; }
 .auth-link { margin: 18px 0 0; color: #64748b; text-align: center; }
 .auth-link a { color: #2563eb; font-weight: bold; text-decoration: none; }
 .message { margin: 16px 0; padding: 10px 12px; border-radius: 8px; font-size: .9rem; }
@@ -58,6 +57,14 @@ th { color: #64748b; background: #f8fafc; font-size: .75rem; text-transform: upp
 .modal-header h2 { font-size: 1.25rem; }
 .icon-button { color: #64748b; background: none; border: 0; font-size: 1.7rem; }
 .version-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 13px 0; border-bottom: 1px solid #e2e8f0; }
+.section-title { margin: 24px 0 8px; font-size: 1rem; }
+.share-form { display: grid; gap: 4px; margin: 18px 0 8px; }
+.share-form label { margin-top: 10px; }
+.share-form select { width: 100%; padding: 11px 12px; border: 1px solid #cbd5e1; border-radius: 8px; background: white; }
+.share-form button { margin-top: 14px; }
+.hash-value { font-family: Consolas, "Courier New", monospace; word-break: break-all; }
+.permission-checkbox { width: auto; }
+.main-nav { flex-wrap: wrap; }
 
 @media (max-width: 700px) {
   .topbar { align-items: flex-start; flex-direction: column; padding: 15px 20px; }

@@ -40,8 +40,10 @@ backend/
     __init__.py
     conftest.py         Prepara la base de datos y el storage de pruebas
     test_auth.py        Pruebas del modulo de autenticacion
-    test_files.py       Pruebas de creacion, versionado, permisos y restore
+    test_files.py       Pruebas de creacion, versionado, permisos, restore e integridad
     test_admin.py       Pruebas de administracion y revocacion de permisos
+    test_shares.py      Pruebas de comparticion y revocacion
+    test_logs.py        Pruebas del LogBook y de los exports CSV/JSON
 ```
 
 Ademas, en la raiz del proyecto hace falta un `.env` (se crea copiando `.env.example`).
@@ -54,7 +56,7 @@ Ese `.env` tiene las claves secretas y **no se sube a Git**.
 Todo el backend funciona igual: **una URL llama a una funcion de Python que responde**.
 
 ```
-María (Streamlit)  --HTTP-->  FastAPI  -->  (comprueba)  -->  PostgreSQL
+María (React)  --HTTP-->  FastAPI  -->  (comprueba)  -->  PostgreSQL
    "usuario/clave"            (tu codigo)                     (datos)
                                         <-- devuelve token --
 ```
@@ -408,8 +410,9 @@ Servicios que se levantan:
 |---|---|---|
 | `db` | PostgreSQL | puerto 5432 |
 | `azurite` | Almacenamiento (emulador Azure Blob) | puerto 10000 |
-| `backend` | Tu API FastAPI | http://localhost:8000/docs |
-| `frontend` | Streamlit (aun no existe) | puerto 8501 |
+| `backend` | Tu API FastAPI | https://localhost:8443/docs |
+| `frontend` | React + Vite servido por nginx | https://localhost:8443 |
+| `nginx` | Proxy HTTPS | https://localhost:8443 |
 
 Comandos utiles:
 
@@ -425,7 +428,7 @@ docker compose down -v           # parar y BORRAR los datos
 ## 7. Como probarlo
 
 ### 7.1 En el navegador (Swagger)
-1. Abre **http://localhost:8000/docs**.
+1. Abre **https://localhost:8443/docs**.
 2. `POST /auth/register` → "Try it out" → crea `maria`.
 3. `POST /auth/login` → copia el `access_token`.
 4. Arriba a la derecha, boton **Authorize** → pega el token.
@@ -438,16 +441,18 @@ Se ejecutan **dentro del contenedor**, contra una base de datos de prueba (`appd
 que se crea sola, para no tocar tus datos reales:
 
 ```bash
-docker compose exec backend pytest
+docker compose run --rm backend pytest
 ```
 
-Los tests (`tests/test_auth.py`, `tests/test_files.py` y `tests/test_admin.py`) comprueban:
+Los tests (`tests/test_auth.py`, `tests/test_files.py`, `tests/test_admin.py`,
+`tests/test_shares.py` y `tests/test_logs.py`) comprueban:
 `/health`, registro + login + `/auth/me`, login con contrasena incorrecta (`401`), usuario
 duplicado (`400`), `/auth/me` sin token (`401`), logout con revocacion del token,
 revocacion solo de la sesion actual, caducidad por inactividad, extension de actividad,
 tokens sin `sid`, creacion y versionado, permisos, aislamiento entre usuarios, historial,
-descarga de versiones, restauracion, rollback si falla el storage, listado global del
-admin, bypass del admin y revocacion de permisos.
+descarga de versiones, restauracion, SHA-256 por version, deteccion de corrupcion,
+rollback si falla el storage, comparticion y revocacion, listado global del admin,
+bypass del admin, revocacion de permisos y filtrado/export del LogBook.
 
 ---
 

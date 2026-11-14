@@ -34,12 +34,14 @@ class FileOut(BaseModel):
     size_bytes: int
     version_created_at: datetime
     created_at: datetime
+    access_level: str | None = None
 
 
 class FileVersionOut(BaseModel):
     id: int
     version_number: int
     size_bytes: int
+    sha256: str | None
     content_type: str | None
     created_at: datetime
     created_by: int

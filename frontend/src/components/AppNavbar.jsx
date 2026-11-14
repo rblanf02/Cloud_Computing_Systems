@@ -10,7 +10,7 @@ function AppNavbar() {
     if (!window.confirm("¿Seguro que quieres cerrar sesión?")) return;
 
     try {
-      await api.logout(user?.username);
+      await api.logout();
     } finally {
       tokenService.removeSession();
       navigate("/login");
@@ -25,7 +25,10 @@ function AppNavbar() {
       </div>
       <nav className="main-nav">
         <NavLink to="/files">Mis ficheros</NavLink>
+        <NavLink to="/shared">Compartidos</NavLink>
+        <NavLink to="/trash">Papelera</NavLink>
         <NavLink to="/logs">LogBook</NavLink>
+        {user?.is_admin && <NavLink to="/admin/users">Admin</NavLink>}
       </nav>
       <div className="user-menu">
         <span>{user?.username}</span>

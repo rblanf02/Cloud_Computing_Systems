@@ -164,8 +164,8 @@ def get_file_with_access(
 
     if share is None:
         raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Access denied to this file",
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="File not found",
         )
 
     hierarchy = {"reader": 1, "editor": 2, "manager": 3}

@@ -26,8 +26,8 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
         email=payload.email,
         hashed_password=hash_password(payload.password),
         can_read=True,
-        can_write=False,
-        can_update=False,
+        can_write=True,
+        can_update=True,
         is_admin=False,
     )
     db.add(user)

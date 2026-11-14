@@ -6,8 +6,8 @@
    de API (OpenAPI) se escriben primero. Con eso cada persona construye su modulo
    contra el contrato, no contra el codigo de otro.
 2. **Cada modulo funciona solo**: se puede probar sin el resto (Jose con Swagger,
-   Ruben con un script, Maria con `USE_MOCK=true`, Nico con scripts SQL, Diego con
-   Docker).
+   Ruben con un script, Maria con el frontend contra datos simulados, Nico con scripts
+   SQL, Diego con Docker).
 3. **Integracion al final, no al principio**: nadie espera al companero para avanzar;
    solo se unen las piezas en los hitos.
 4. **Rama propia + PR**: cada uno trabaja en `feature/<nombre>`.
@@ -33,11 +33,13 @@
   contrato de endpoints lo fija Jose (OpenAPI). Ruben programa contra esos contratos.
 - **Foco**: el rubro "muy buena nota" (versionado).
 
-### Maria - Frontend multi-dispositivo (Streamlit)
-- **Objetivo**: UI de login, listado, subida y descarga; usable en PC/tablet/movil.
-- **Entregables**: `frontend/app.py`, `frontend/requirements.txt`, `frontend/Dockerfile`.
-- **Arranca SOLO**: con `USE_MOCK=true` construye TODA la interfaz con datos falsos,
-  sin backend. Cuando la API este lista, cambia a `USE_MOCK=false`.
+### Maria - Frontend multi-dispositivo (React + Vite)
+- **Objetivo**: UI de login, ficheros, compartidos, papelera, LogBook y admin; usable
+  en PC/tablet/movil.
+- **Entregables**: `frontend/src/`, `frontend/vite.config.js`, `frontend/Dockerfile`,
+  `frontend/nginx.conf`.
+- **Arranca SOLO**: con `npm run dev` y el proxy de Vite contra un backend local, o
+  contra respuestas simuladas. Cuando la API esta lista, usa los endpoints reales.
 - **Bloquea a otros**: a nadie. Consume el contrato OpenAPI en integracion.
 - **Foco**: usabilidad y que se vea bien en los 3 dispositivos.
 
@@ -67,14 +69,15 @@
 |---|---|---|
 | Jose | Login/JWT + `/auth/me` + tests | Probar en `/docs` |
 | Ruben | `storage.py` + script subir/descargar 3 versiones | Script en Azurite |
-| Maria | UI completa con `USE_MOCK=true` | `streamlit run app.py` |
+| Maria | UI completa contra API o datos simulados | `npm run dev` |
 | Diego | `docker compose up` + nginx TLS + CI | `curl -k https://localhost:8443` |
 | Nico | ER + `seed.py` + export CSV/JSON | Ejecutar seed + export |
 
 ## Hitos de integracion
 
 1. **H1 (fin sem 1)**: contratos (ER + OpenAPI) y docker-compose verdes.
-2. **H2 (fin sem 2)**: auth + storage + logbook integrados; Maria pasa a `USE_MOCK=false`.
+2. **H2 (fin sem 2)**: auth + storage + logbook integrados; Maria conecta el frontend
+   a la API real.
 3. **H3 (fin sem 3)**: pruebas + seguridad + versionado validado.
 4. **H4**: despliegue en Azure + HTTPS + demo.
 5. **H5**: presentacion final.

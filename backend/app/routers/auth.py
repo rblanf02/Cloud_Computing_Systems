@@ -25,15 +25,12 @@ def register(payload: UserRegister, db: Session = Depends(get_db)):
         username=payload.username,
         email=payload.email,
         hashed_password=hash_password(payload.password),
-        can_read=True,
-        can_write=False,
-        can_update=False,
         is_admin=False,
     )
     db.add(user)
     db.flush()
 
-    write_log(db, action="REGISTER", username=user.username, resource=f"user:{user.id}")
+    write_log(db, action="REGISTER", user_id=user.user_id, status="OK")
     db.commit()
     db.refresh(user)
     return user
@@ -44,13 +41,7 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == payload.username).first()
 
     if user is None or not verify_password(payload.password, user.hashed_password):
-        write_log(
-            db,
-            action="LOGIN",
-            username=payload.username,
-            result="FAIL",
-            details="Credenciales incorrectas",
-        )
+        write_log(db, action="LOGIN", user_id=user.user_id if user else None, status="FAIL")
         db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -60,14 +51,14 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
     now = datetime.now(timezone.utc)
     auth_session = UserSession(
         id=str(uuid4()),
-        user_id=user.id,
+        user_id=user.user_id,
         last_activity_at=now,
     )
     db.add(auth_session)
     db.flush()
 
     token = create_access_token({"sub": user.username, "sid": auth_session.id})
-    write_log(db, action="LOGIN", username=user.username, result="OK")
+    write_log(db, action="LOGIN", user_id=user.user_id, status="OK")
     db.commit()
     return Token(access_token=token)
 
@@ -83,6 +74,6 @@ def logout(
     db: Session = Depends(get_db),
 ):
     context.session.revoked_at = datetime.now(timezone.utc)
-    write_log(db, action="LOGOUT", username=context.user.username, result="OK")
+    write_log(db, action="LOGOUT", user_id=context.user.user_id, status="OK")
     db.commit()
     return Message(detail="Sesion cerrada")

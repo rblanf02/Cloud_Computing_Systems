@@ -2,32 +2,20 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..deps import get_current_user
 from ..models import LogEvent, User
-from ..deps import require_permission
+from ..schemas import LogEventOut
 
 router = APIRouter(prefix="/logs", tags=["logs"])
 
-@router.get("")
+
+@router.get("", response_model=list[LogEventOut])
 def get_logs(
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_permission("read"))
+    current_user: User = Depends(get_current_user),
 ):
-    logs = (
-        db.query(LogEvent)
-        .order_by(LogEvent.timestamp.desc())
-        .limit(100)
-        .all()
-    )
-    
-    return [
-        {
-            "id": log.id,
-            "timestamp": log.timestamp.isoformat(),
-            "username": log.username,
-            "action": log.action,
-            "resource": log.resource,
-            "result": log.result,
-            "details": log.details
-        }
-        for log in logs
-    ]
+    query = db.query(LogEvent)
+    if not current_user.is_admin:
+        query = query.filter(LogEvent.user_id == current_user.user_id)
+    logs = query.order_by(LogEvent.created_at.desc()).limit(100).all()
+    return logs

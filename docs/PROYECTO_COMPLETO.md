@@ -175,26 +175,35 @@ El criterio fue **el stack mas sencillo para el equipo**:
 ```
 users                         files                         file_versions
 -----                         -----                         -------------
-id (PK)                       id (PK)                       id (PK)
-username (unique)             owner_id (FK -> users.id)     file_id (FK -> files.id)
-email                         filename                      version_number
-hashed_password               content_type                  size_bytes
-can_read  (bool)              created_at                    blob_name
-can_write (bool)              current_version               created_at
-can_update(bool)                                            created_by (FK -> users.id)
-is_admin  (bool)
-created_at                    |                             |
+user_id (PK)                  file_id (PK)                  (file_id, version_number) (PK)
+username (unique)             filename                      file_id (FK -> files.file_id)
+email (unique)                extension                     version_number
+hashed_password               owner_id (FK -> users.user_id) blob_name
+is_admin                      deleted_at                    uploaded_by (FK -> users.user_id)
+created_at                                                  uploaded_at
+quota_bytes                                                 size_bytes
+                              |
                               +--- 1:N --- file_versions
+
+file_shares
+-----------
+(file_id, granted_to) (PK)
+file_id (FK -> files.file_id)
+granted_to (FK -> users.user_id)
+granted_by (FK -> users.user_id)
+access_level
 
 log_events
 ----------
-id (PK) | timestamp | username | action | resource | result | details
+log_id (PK) | user_id | file_id | action | status | ip_address | created_at
 ```
 
-Relaciones:
-- `users 1:N files` (un usuario tiene muchos ficheros).
-- `files 1:N file_versions` (un fichero tiene muchas versiones).
-- `log_events` es independiente: registra eventos de cualquier usuario/accion.
+Relaciones y reglas:
+- `users 1:N files` por `owner_id` (el dueño se identifica por `files.owner_id`).
+- `files 1:N file_versions` (un fichero tiene muchas versiones). La clave `(file_id, version_number)` impide versiones duplicadas del mismo fichero.
+- `file_shares` modela el acceso de otros usuarios a un fichero: PK `(file_id, granted_to)`, `granted_by` indica quién concedió el acceso y `access_level` el nivel acumulativo (`lector`, `editor`, `gestor`). Los permisos sobre ficheros ajenos se resuelven en `file_shares`; el dueño puede gestionar sus propios ficheros.
+- `log_events` es un registro histórico independiente (`log_id` propio): `user_id` y `file_id` pueden ser nulos y no están obligados a apuntar a filas existentes, para que el log no cambie aunque se borren usuarios o ficheros.
+- `files.deleted_at` implementa la papelera (`NULL` = fichero normal, con fecha = en papelera del dueño). `users.quota_bytes` limita el espacio por usuario; el uso se calcula sumando `size_bytes` de las versiones de sus ficheros.
 
 ---
 

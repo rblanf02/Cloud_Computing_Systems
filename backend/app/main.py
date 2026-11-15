@@ -23,9 +23,6 @@ def seed_admin() -> None:
             username=settings.seed_admin_username,
             email=settings.seed_admin_email,
             hashed_password=hash_password(settings.seed_admin_password),
-            can_read=True,
-            can_write=True,
-            can_update=True,
             is_admin=True,
         )
         db.add(admin)

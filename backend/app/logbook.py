@@ -6,17 +6,18 @@ from .models import LogEvent
 def write_log(
     db: Session,
     action: str,
-    username: str | None = None,
-    resource: str | None = None,
-    result: str = "OK",
-    details: str | None = None,
+    *,
+    user_id: int | None = None,
+    file_id: int | None = None,
+    status: str = "OK",
+    ip_address: str | None = None,
 ) -> LogEvent:
     event = LogEvent(
-        username=username,
+        user_id=user_id,
+        file_id=file_id,
         action=action,
-        resource=resource,
-        result=result,
-        details=details,
+        status=status,
+        ip_address=ip_address,
     )
     db.add(event)
     return event

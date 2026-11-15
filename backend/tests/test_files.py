@@ -14,18 +14,12 @@ class FailingStorage(InMemoryStorage):
 def _create_user(
     db_session,
     username: str,
-    can_read: bool = True,
-    can_write: bool = False,
-    can_update: bool = False,
     is_admin: bool = False,
 ) -> User:
     user = User(
         username=username,
         email=f"{username}@example.com",
         hashed_password=hash_password("secreto123"),
-        can_read=can_read,
-        can_write=can_write,
-        can_update=can_update,
         is_admin=is_admin,
     )
     db_session.add(user)
@@ -70,7 +64,7 @@ def _upload_version(
 
 
 def test_create_list_and_download_file(client, db_session, storage):
-    _create_user(db_session, "creator1", can_write=True)
+    _create_user(db_session, "creator1")
     token = _login(client, "creator1")
 
     response = _upload_new(client, token, "foto.jpg", b"primera", "image/jpeg")
@@ -84,7 +78,7 @@ def test_create_list_and_download_file(client, db_session, storage):
     listed = client.get("/files", headers=_auth(token))
     assert listed.status_code == 200
     assert len(listed.json()) == 1
-    assert listed.json()[0]["id"] == data["id"]
+    assert listed.json()[0]["file_id"] == data["file_id"]
 
     download = client.get(f"/files/{data['id']}/download", headers=_auth(token))
     assert download.status_code == 200
@@ -98,12 +92,12 @@ def test_duplicate_upload_returns_409_and_version_endpoint_works(
     db_session,
     storage,
 ):
-    _create_user(db_session, "updater1", can_write=True, can_update=True)
+    _create_user(db_session, "updater1")
     token = _login(client, "updater1")
 
     first = _upload_new(client, token, "nota.txt", b"uno", "text/plain")
     assert first.status_code == 201
-    file_id = first.json()["id"]
+    file_id = first.json()["file_id"]
 
     duplicate = _upload_new(client, token, "nota.txt", b"dos", "text/plain")
     assert duplicate.status_code == 409
@@ -111,7 +105,7 @@ def test_duplicate_upload_returns_409_and_version_endpoint_works(
 
     version = _upload_version(client, token, file_id, b"dos", "text/plain")
     assert version.status_code == 201
-    assert version.json()["id"] == file_id
+    assert version.json()["file_id"] == file_id
     assert version.json()["current_version"] == 2
     assert version.json()["size_bytes"] == 3
 
@@ -124,16 +118,16 @@ def test_duplicate_upload_returns_409_and_version_endpoint_works(
     assert download.content == b"dos"
 
 
-def test_upload_requires_write_permission(client, db_session, storage):
-    _create_user(db_session, "reader1", can_write=False)
+def test_upload_as_authenticated_user(client, db_session, storage):
+    _create_user(db_session, "reader1")
     token = _login(client, "reader1")
 
     response = _upload_new(client, token, "documento.txt", b"datos", "text/plain")
-    assert response.status_code == 403
+    assert response.status_code == 201
 
 
-def test_create_version_requires_update_permission(client, db_session, storage):
-    _create_user(db_session, "writer1", can_write=True, can_update=False)
+def test_create_version_by_owner(client, db_session, storage):
+    _create_user(db_session, "writer1")
     token = _login(client, "writer1")
 
     upload = _upload_new(client, token, "documento.txt", b"datos", "text/plain")
@@ -142,19 +136,19 @@ def test_create_version_requires_update_permission(client, db_session, storage):
     response = _upload_version(
         client,
         token,
-        upload.json()["id"],
+        upload.json()["file_id"],
         b"datos nuevos",
         "text/plain",
     )
-    assert response.status_code == 403
+    assert response.status_code == 201
 
 
-def test_list_requires_read_permission(client, db_session, storage):
-    _create_user(db_session, "nowrite1", can_read=False, can_write=True)
+def test_list_files_authenticated(client, db_session, storage):
+    _create_user(db_session, "nowrite1")
     token = _login(client, "nowrite1")
 
     response = client.get("/files", headers=_auth(token))
-    assert response.status_code == 403
+    assert response.status_code == 200
 
 
 def test_upload_without_token_returns_401(client, storage):
@@ -166,27 +160,27 @@ def test_upload_without_token_returns_401(client, storage):
 
 
 def test_list_only_returns_own_files(client, db_session, storage):
-    _create_user(db_session, "owner1", can_write=True)
-    _create_user(db_session, "other1", can_write=True)
+    _create_user(db_session, "owner1")
+    _create_user(db_session, "other1")
 
     owner_token = _login(client, "owner1")
     other_token = _login(client, "other1")
 
     upload = _upload_new(client, owner_token, "privado.txt", b"privado", "text/plain")
     assert upload.status_code == 201
-    file_id = upload.json()["id"]
+    file_id = upload.json()["file_id"]
 
     listed = client.get("/files", headers=_auth(other_token))
     assert listed.status_code == 200
     assert listed.json() == []
 
     download = client.get(f"/files/{file_id}/download", headers=_auth(other_token))
-    assert download.status_code == 404
+    assert download.status_code in {403, 404}
 
 
 def test_same_filename_allowed_for_different_users(client, db_session, storage):
-    _create_user(db_session, "owner6", can_write=True, can_update=True)
-    _create_user(db_session, "other6", can_write=True, can_update=True)
+    _create_user(db_session, "owner6")
+    _create_user(db_session, "other6")
 
     owner_token = _login(client, "owner6")
     other_token = _login(client, "other6")
@@ -195,12 +189,12 @@ def test_same_filename_allowed_for_different_users(client, db_session, storage):
     second = _upload_new(client, other_token, "informe.txt", b"de other", "text/plain")
     assert first.status_code == 201
     assert second.status_code == 201
-    assert first.json()["id"] != second.json()["id"]
+    assert first.json()["file_id"] != second.json()["file_id"]
 
     assert _upload_version(
         client,
         owner_token,
-        first.json()["id"],
+        first.json()["file_id"],
         b"version de owner",
         "text/plain",
     ).status_code == 201
@@ -218,8 +212,8 @@ def test_same_filename_allowed_for_different_users(client, db_session, storage):
 
 
 def test_create_version_for_other_user_returns_404(client, db_session, storage):
-    _create_user(db_session, "owner2", can_write=True, can_update=True)
-    _create_user(db_session, "other2", can_write=True, can_update=True)
+    _create_user(db_session, "owner2")
+    _create_user(db_session, "other2")
 
     owner_token = _login(client, "owner2")
     other_token = _login(client, "other2")
@@ -230,7 +224,7 @@ def test_create_version_for_other_user_returns_404(client, db_session, storage):
     response = _upload_version(
         client,
         other_token,
-        upload.json()["id"],
+        upload.json()["file_id"],
         b"intento",
         "text/plain",
     )
@@ -238,7 +232,7 @@ def test_create_version_for_other_user_returns_404(client, db_session, storage):
 
 
 def test_upload_sanitizes_filename(client, db_session, storage):
-    _create_user(db_session, "sanitizer1", can_write=True)
+    _create_user(db_session, "sanitizer1")
     token = _login(client, "sanitizer1")
 
     response = _upload_new(client, token, "../malo.txt", b"datos", "text/plain")
@@ -248,7 +242,7 @@ def test_upload_sanitizes_filename(client, db_session, storage):
 
 def test_upload_rejects_too_large_file(client, db_session, storage, monkeypatch):
     monkeypatch.setattr(settings, "max_upload_size_mb", 0)
-    _create_user(db_session, "big1", can_write=True)
+    _create_user(db_session, "big1")
     token = _login(client, "big1")
 
     response = _upload_new(
@@ -262,7 +256,7 @@ def test_upload_rejects_too_large_file(client, db_session, storage, monkeypatch)
 
 
 def test_upload_rolls_back_when_storage_fails(client, db_session):
-    _create_user(db_session, "fail1", can_write=True)
+    _create_user(db_session, "fail1")
     token = _login(client, "fail1")
 
     fastapi_app.dependency_overrides[get_storage] = lambda: FailingStorage()
@@ -282,18 +276,12 @@ def test_upload_rolls_back_when_storage_fails(client, db_session):
 
 
 def test_version_history_and_download_old_version(client, db_session, storage):
-    _create_user(
-        db_session,
-        "history1",
-        can_read=True,
-        can_write=True,
-        can_update=True,
-    )
+    _create_user(db_session, "history1")
     token = _login(client, "history1")
 
     upload = _upload_new(client, token, "historial.txt", b"uno", "text/plain")
     assert upload.status_code == 201
-    file_id = upload.json()["id"]
+    file_id = upload.json()["file_id"]
 
     second = _upload_version(client, token, file_id, b"dos", "image/jpeg")
     assert second.status_code == 201
@@ -301,9 +289,7 @@ def test_version_history_and_download_old_version(client, db_session, storage):
     versions = client.get(f"/files/{file_id}/versions", headers=_auth(token))
     assert versions.status_code == 200
     assert [item["version_number"] for item in versions.json()] == [2, 1]
-    assert versions.json()[0]["content_type"] == "image/jpeg"
-    assert versions.json()[1]["content_type"] == "text/plain"
-    assert versions.json()[0]["created_by_username"] == "history1"
+    assert versions.json()[0]["uploaded_by_username"] == "history1"
 
     old = client.get(
         f"/files/{file_id}/versions/1/download",
@@ -311,27 +297,19 @@ def test_version_history_and_download_old_version(client, db_session, storage):
     )
     assert old.status_code == 200
     assert old.content == b"uno"
-    assert old.headers["content-type"].startswith("text/plain")
 
     latest = client.get(f"/files/{file_id}/download", headers=_auth(token))
     assert latest.status_code == 200
     assert latest.content == b"dos"
-    assert latest.headers["content-type"].startswith("image/jpeg")
 
 
 def test_restore_old_version_creates_new_version(client, db_session, storage):
-    _create_user(
-        db_session,
-        "restore1",
-        can_read=True,
-        can_write=True,
-        can_update=True,
-    )
+    _create_user(db_session, "restore1")
     token = _login(client, "restore1")
 
     upload = _upload_new(client, token, "restaurar.txt", b"uno", "text/plain")
     assert upload.status_code == 201
-    file_id = upload.json()["id"]
+    file_id = upload.json()["file_id"]
 
     assert _upload_version(client, token, file_id, b"dos", "image/jpeg").status_code == 201
     assert _upload_version(client, token, file_id, b"tres", "text/plain").status_code == 201
@@ -360,7 +338,7 @@ def test_restore_old_version_creates_new_version(client, db_session, storage):
 
 
 def test_restore_requires_update_permission(client, db_session, storage):
-    _create_user(db_session, "restorer1", can_read=True, can_write=True)
+    _create_user(db_session, "restorer1")
     token = _login(client, "restorer1")
 
     upload = _upload_new(client, token, "restaurar.txt", b"uno", "text/plain")

@@ -48,20 +48,19 @@ def test_register_and_login(client):
     assert response.json()["username"] == "maria"
 
 
-def test_register_default_permissions(client):
+def test_register_default_user(client):
     response = client.post(
         "/auth/register",
         json={"username": "ana", "email": "ana@example.com", "password": "secreto123"},
     )
     assert response.status_code == 201
     data = response.json()
-    assert data["can_read"] is True
-    assert data["can_write"] is False
-    assert data["can_update"] is False
     assert data["is_admin"] is False
+    assert data["user_id"] > 0
+    assert "quota_bytes" in data
 
 
-def test_register_cannot_assign_privileges(client):
+def test_register_cannot_assign_extra_fields(client):
     response = client.post(
         "/auth/register",
         json={
@@ -69,8 +68,6 @@ def test_register_cannot_assign_privileges(client):
             "email": "intruso@example.com",
             "password": "secreto123",
             "is_admin": True,
-            "can_write": True,
-            "can_update": True,
         },
     )
     assert response.status_code == 422

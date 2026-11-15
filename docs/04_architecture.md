@@ -35,25 +35,39 @@
 ```
 users                         files                         file_versions
 -----                         -----                         -------------
-id (PK)                       id (PK)                       id (PK)
-username (unique)             owner_id (FK -> users.id)     file_id (FK -> files.id)
-email                         filename                      version_number
-hashed_password               content_type                  size_bytes
-can_read  (bool)              created_at                    blob_name
-can_write (bool)              current_version               content_type
-can_update(bool)                                            created_at
-is_admin  (bool)                                            created_by (FK -> users.id)
-created_at                    |                             |
+user_id (PK)                  file_id (PK)                  (file_id, version_number) (PK)
+username (unique)             filename                      file_id (FK -> files.file_id)
+email (unique)                extension                     version_number
+hashed_password               owner_id (FK -> users.user_id) blob_name
+is_admin                      deleted_at                    uploaded_by (FK -> users.user_id)
+created_at                                                  uploaded_at
+quota_bytes                                                 size_bytes
+                              |
                               +--- 1:N --- file_versions
+
+file_shares
+-----------
+(file_id, granted_to) (PK)
+file_id (FK -> files.file_id)
+granted_to (FK -> users.user_id)
+granted_by (FK -> users.user_id)
+access_level
 
 log_events
 ----------
-id (PK) | timestamp | username | action | resource | result | details
+log_id (PK) | user_id | file_id | action | status | ip_address | created_at
 
 user_sessions
 -------------
-id (PK) | user_id (FK -> users.id) | created_at | last_activity_at | revoked_at
+id (PK) | user_id (FK -> users.user_id) | created_at | last_activity_at | revoked_at
 ```
+
+Relaciones y reglas clave:
+- `users 1:N files` por `owner_id`.
+- `files 1:N file_versions`; el historial de versiones es el conjunto de filas de un fichero en `file_versions`.
+- `file_shares` relaciona ficheros y usuarios con acceso concedido (`granted_to`), guardando quién lo concedió (`granted_by`) y el nivel (`lector/editor/gestor`, acumulativos).
+- `log_events` es un registro histórico: `user_id` y `file_id` pueden ser nulos y no dependen de que existan las filas referidas.
+- `deleted_at` en `files` implementa la papelera (`NULL` = activo, con fecha = en papelera).
 
 ## API REST (resumen)
 

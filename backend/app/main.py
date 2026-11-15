@@ -1,4 +1,5 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -8,6 +9,26 @@ from .database import Base, SessionLocal, engine
 from .models import User
 from .routers import admin, auth, files, logs
 from .security import hash_password
+
+
+def run_migrations() -> None:
+    """Aplica migraciones de BD si Alembic está disponible; si no, crea tablas."""
+    try:
+        from alembic import command
+        from alembic.config import Config
+
+        ini_path = Path(__file__).resolve().parents[1] / "alembic.ini"
+        if ini_path.exists():
+            alembic_cfg = Config(str(ini_path))
+            alembic_cfg.set_main_option(
+                "script_location", str(ini_path.parent / "alembic")
+            )
+            command.upgrade(alembic_cfg, "head")
+            return
+    except Exception:
+        pass
+
+    Base.metadata.create_all(bind=engine)
 
 
 def seed_admin() -> None:
@@ -41,7 +62,7 @@ async def lifespan(app: FastAPI):
                 "SEED_ADMIN_PASSWORD debe cambiarse fuera de desarrollo"
             )
 
-    Base.metadata.create_all(bind=engine)
+    run_migrations()
     if settings.seed_admin:
         seed_admin()
     yield

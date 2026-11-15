@@ -1,6 +1,7 @@
 from sqlalchemy import (
     BigInteger,
     Boolean,
+    CheckConstraint,
     Column,
     DateTime,
     ForeignKey,
@@ -24,6 +25,10 @@ class User(Base):
     is_admin = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     quota_bytes = Column(BigInteger, nullable=False, default=1073741824)
+
+    __table_args__ = (
+        CheckConstraint("quota_bytes >= 0", name="ck_users_quota_bytes_non_negative"),
+    )
 
     files = relationship("File", back_populates="owner")
     versions_uploaded = relationship("FileVersion", back_populates="uploader")
@@ -68,7 +73,7 @@ class File(Base):
         nullable=False,
         index=True,
     )
-    deleted_at = Column(DateTime(timezone=True), nullable=True)
+    deleted_at = Column(DateTime(timezone=True), nullable=True, index=True)
 
     owner = relationship("User", back_populates="files")
     versions = relationship(
@@ -112,6 +117,12 @@ class FileVersion(Base):
 
 class FileShare(Base):
     __tablename__ = "file_shares"
+    __table_args__ = (
+        CheckConstraint(
+            "access_level IN ('lector', 'editor', 'gestor')",
+            name="ck_file_shares_access_level",
+        ),
+    )
 
     file_id = Column(
         Integer,
@@ -127,6 +138,7 @@ class FileShare(Base):
         Integer,
         ForeignKey("users.user_id", ondelete="CASCADE"),
         nullable=False,
+        index=True,
     )
     access_level = Column(String(20), nullable=False)
 
@@ -137,6 +149,12 @@ class FileShare(Base):
 
 class LogEvent(Base):
     __tablename__ = "log_events"
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('OK', 'FAIL')",
+            name="ck_log_events_status",
+        ),
+    )
 
     log_id = Column(Integer, primary_key=True)
     user_id = Column(Integer, nullable=True, index=True)

@@ -136,11 +136,6 @@ const api = {
   getLogs: () => request("/logs"),
   exportLogs: (format) => requestBlob(`/logs/export?fmt=${format}`),
   getUsers: () => request("/admin/users"),
-  updatePermissions: (userId, permissions) =>
-    request(`/admin/users/${userId}/permissions`, {
-      method: "PATCH",
-      body: JSON.stringify(permissions),
-    }),
   getAllFiles: () => request("/admin/files"),
 };
 

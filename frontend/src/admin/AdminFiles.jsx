@@ -30,7 +30,7 @@ function AdminFiles() {
     setMessage("");
     setError("");
     try {
-      const downloadedFile = await api.download(file.id);
+      const downloadedFile = await api.download(file.file_id);
       downloadFile(downloadedFile, file.filename);
       setMessage("Fichero descargado correctamente.");
     } catch (downloadError) {
@@ -68,12 +68,12 @@ function AdminFiles() {
               </thead>
               <tbody>
                 {files.length ? files.map((file) => (
-                  <tr key={file.id}>
+                  <tr key={file.file_id}>
                     <td>{file.filename}</td>
                     <td>{file.owner_username}</td>
                     <td>{file.current_version}</td>
                     <td>{formatBytes(file.size_bytes)}</td>
-                    <td>{formatDate(file.version_created_at)}</td>
+                    <td>{formatDate(file.uploaded_at)}</td>
                     <td>
                       <button className="button button-secondary" onClick={() => download(file)}>
                         Descargar

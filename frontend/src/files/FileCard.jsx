@@ -19,7 +19,7 @@ function FileCard({
   function chooseVersion() {
     const input = document.createElement("input");
     input.type = "file";
-    input.onchange = () => input.files[0] && onUploadVersion(file.id, input.files[0]);
+    input.onchange = () => input.files[0] && onUploadVersion(file.file_id, input.files[0]);
     input.click();
   }
 
@@ -31,7 +31,7 @@ function FileCard({
           <div>
             <div className="file-name" title={file.filename}>{file.filename}</div>
             <div className="file-meta">
-              {formatBytes(file.size_bytes)} · versión {file.current_version} · {formatDate(file.version_created_at)}
+              {formatBytes(file.size_bytes)} · versión {file.current_version} · {formatDate(file.uploaded_at)}
             </div>
             {showOwner && (
               <div className="file-meta">

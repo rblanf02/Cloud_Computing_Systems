@@ -57,7 +57,7 @@ function FileList() {
     setMessage("");
     setError("");
     try {
-      await api.delete(file.id);
+      await api.delete(file.file_id);
       await loadFiles();
       setMessage("Fichero movido a la papelera.");
     } catch (deleteError) {
@@ -69,7 +69,7 @@ function FileList() {
     setMessage("");
     setError("");
     try {
-      const downloadedFile = await api.download(file.id, version);
+      const downloadedFile = await api.download(file.file_id, version);
       downloadFile(downloadedFile, file.filename);
       setMessage("Fichero descargado correctamente.");
     } catch (downloadError) {
@@ -103,7 +103,7 @@ function FileList() {
           <div className="file-list">
             {files.length ? files.map((file) => (
               <FileCard
-                key={file.id}
+                key={file.file_id}
                 file={file}
                 onDelete={deleteFile}
                 onUploadVersion={uploadVersion}

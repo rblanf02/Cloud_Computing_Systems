@@ -42,7 +42,7 @@ function SharedFiles() {
     setMessage("");
     setError("");
     try {
-      const downloadedFile = await api.download(file.id, version);
+      const downloadedFile = await api.download(file.file_id, version);
       downloadFile(downloadedFile, file.filename);
       setMessage("Fichero descargado correctamente.");
     } catch (downloadError) {
@@ -68,7 +68,7 @@ function SharedFiles() {
           <div className="file-list">
             {files.length ? files.map((file) => (
               <FileCard
-                key={file.id}
+                key={file.file_id}
                 file={file}
                 showOwner
                 onUploadVersion={uploadVersion}

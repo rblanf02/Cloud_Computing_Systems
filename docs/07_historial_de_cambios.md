@@ -35,7 +35,8 @@
 
 | Fecha | Autor | Tipo | Resumen | Commit |
 |---|---|---|---|---|
-| 2026-11-17 | Maria (Maria Celdran Noguera) | backend + BD + tests | Integrar las funciones de Jose sobre el esquema nuevo: SHA-256, `/logs/export`, listado de shares y `username` en logs | (este commit) |
+| 2026-11-17 | Maria (Maria Celdran Noguera) | frontend | Adaptar la UI al esquema nuevo (file_id/user_id, LogBook, quitar permisos can_*) | (este commit) |
+| 2026-11-17 | Maria (Maria Celdran Noguera) | backend + BD + tests | Integrar las funciones de Jose sobre el esquema nuevo: SHA-256, `/logs/export`, listado de shares y `username` en logs | (pendiente) |
 | 2026-11-15 | Maria (Maria Celdran Noguera) | BD + docs | Esquema definitivo, migraciones Alembic, integridad (punto 4) y diagrama ER | `c0d8139`, `b0a61d8`, `db92081`, `728630d`, `2da0e2c` |
 | 2026-11-14 | Jose (JoseParedes) | frontend + backend + infra + docs | Frontend React completo, comparticion, SHA-256, papelera, LogBook y HTTPS de confianza | (pendiente) |
 | 2026-11-13 | Jose (JoseParedes) | infra + frontend | HTTPS local con nginx en 8443 y cierre de puertos directos | (pendiente) |
@@ -50,6 +51,26 @@
 ---
 
 ## 2. Detalle de los cambios
+
+### [2026-11-17] Frontend adaptado al esquema nuevo - Maria
+- **Autor**: Maria Celdran Noguera (m.celdrannoguera@um.es)
+- **Archivos/Areas**: `frontend/src/admin/` (`AdminUsers`, `AdminFiles`),
+  `frontend/src/files/` (`FileCard`, `FileList`, `ShareModal`, `SharedFiles`, `Trash`,
+  `VersionsModal`), `frontend/src/logs/LogBook.jsx`, `frontend/src/services/api.js`
+- **Que se hizo**:
+  - `AdminUsers` deja de mostrar las casillas `can_read/can_write/can_update` y el
+    `PATCH /admin/users/{id}/permissions` (que no existe en el backend actual): ahora es
+    un listado de usuarios con `user_id`, email, rol, alta y cuota.
+  - Se sustituyen todos los `file.id` por `file.file_id` en las pantallas de ficheros.
+  - Se corrigen los campos de versiones: `uploaded_at` y `uploaded_by_username`.
+  - `LogBook` usa los campos reales del API (`created_at`, `file_id`, `status`,
+    `ip_address`) en lugar de `timestamp`, `resource`, `result` y `details`.
+  - Se elimina `updatePermissions` de `api.js`.
+- **Por que**: cerrar la integracion del cambio de esquema: la UI seguia usando los nombres
+  antiguos y las acciones de admin apuntaban a endpoints que ya no existen.
+- **Como probarlo**: `cd frontend && npm ci && npm run build` → build correcto.
+
+---
 
 ### [2026-11-17] Integracion: funciones de Jose sobre el esquema nuevo - Maria
 - **Autor**: Maria Celdran Noguera (m.celdrannoguera@um.es)

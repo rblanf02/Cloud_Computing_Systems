@@ -29,7 +29,7 @@ function Trash() {
     setMessage("");
     setError("");
     try {
-      await api.restoreFile(file.id);
+      await api.restoreFile(file.file_id);
       await loadFiles();
       setMessage("Fichero restaurado correctamente.");
     } catch (restoreError) {
@@ -42,7 +42,7 @@ function Trash() {
     setMessage("");
     setError("");
     try {
-      await api.permanentDelete(file.id);
+      await api.permanentDelete(file.file_id);
       await loadFiles();
       setMessage("Fichero eliminado definitivamente.");
     } catch (deleteError) {
@@ -67,13 +67,13 @@ function Trash() {
         {!loading && (
           <div className="file-list">
             {files.length ? files.map((file) => (
-              <article className="file-card" key={file.id}>
+              <article className="file-card" key={file.file_id}>
                 <div className="file-info">
                   <div className="file-icon">▣</div>
                   <div>
                     <div className="file-name" title={file.filename}>{file.filename}</div>
                     <div className="file-meta">
-                      {formatBytes(file.size_bytes)} · versión {file.current_version} · {formatDate(file.version_created_at)}
+                      {formatBytes(file.size_bytes)} · versión {file.current_version} · {formatDate(file.uploaded_at)}
                     </div>
                   </div>
                 </div>

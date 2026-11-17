@@ -15,7 +15,7 @@ function ShareModal({ file, onClose }) {
     setLoading(true);
     setError("");
     try {
-      setShares(await api.getShares(file.id));
+      setShares(await api.getShares(file.file_id));
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -25,7 +25,7 @@ function ShareModal({ file, onClose }) {
 
   useEffect(() => {
     loadShares();
-  }, [file.id]);
+  }, [file.file_id]);
 
   async function handleSubmit(event) {
     event.preventDefault();
@@ -33,7 +33,7 @@ function ShareModal({ file, onClose }) {
     setMessage("");
     setSaving(true);
     try {
-      await api.shareFile(file.id, username.trim(), accessLevel);
+      await api.shareFile(file.file_id, username.trim(), accessLevel);
       setUsername("");
       setMessage("Permiso concedido correctamente.");
       await loadShares();
@@ -49,7 +49,7 @@ function ShareModal({ file, onClose }) {
     setError("");
     setMessage("");
     try {
-      await api.revokeShare(file.id, share.granted_to);
+      await api.revokeShare(file.file_id, share.granted_to);
       setMessage("Permiso revocado.");
       await loadShares();
     } catch (revokeError) {

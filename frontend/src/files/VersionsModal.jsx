@@ -12,7 +12,7 @@ function VersionsModal({ file, onClose, onDownload, onRestored, canUpdate }) {
     setLoading(true);
     setError("");
     try {
-      setVersions(await api.getVersions(file.id));
+      setVersions(await api.getVersions(file.file_id));
     } catch (loadError) {
       setError(loadError.message);
     } finally {
@@ -22,14 +22,14 @@ function VersionsModal({ file, onClose, onDownload, onRestored, canUpdate }) {
 
   useEffect(() => {
     loadVersions();
-  }, [file.id]);
+  }, [file.file_id]);
 
   async function restore(versionNumber) {
     if (!window.confirm(`¿Restaurar la versión ${versionNumber} como una versión nueva?`)) return;
     setBusyVersion(versionNumber);
     setError("");
     try {
-      await api.restoreVersion(file.id, versionNumber);
+      await api.restoreVersion(file.file_id, versionNumber);
       await loadVersions();
       onRestored?.();
     } catch (restoreError) {
@@ -54,7 +54,7 @@ function VersionsModal({ file, onClose, onDownload, onRestored, canUpdate }) {
             <div>
               <strong>Versión {version.version_number}</strong>
               <div className="file-meta">
-                {formatBytes(version.size_bytes)} · {formatDate(version.created_at)} · {version.created_by_username}
+                {formatBytes(version.size_bytes)} · {formatDate(version.uploaded_at)} · {version.uploaded_by_username}
               </div>
               <div className="file-meta hash-value" title={version.sha256 || "Sin hash"}>
                 SHA-256: {version.sha256 ? `${version.sha256.slice(0, 20)}...` : "no disponible"}

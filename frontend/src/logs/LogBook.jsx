@@ -65,20 +65,20 @@ function LogBook() {
                   <th>Fecha</th>
                   <th>Usuario</th>
                   <th>Acción</th>
-                  <th>Recurso</th>
-                  <th>Resultado</th>
-                  <th>Detalle</th>
+                  <th>Fichero</th>
+                  <th>Estado</th>
+                  <th>IP</th>
                 </tr>
               </thead>
               <tbody>
                 {logs.length ? logs.map((log, index) => (
-                  <tr key={`${log.timestamp}-${index}`}>
-                    <td>{formatDate(log.timestamp)}</td>
+                  <tr key={`${log.log_id}-${index}`}>
+                    <td>{formatDate(log.created_at)}</td>
                     <td>{log.username || "—"}</td>
                     <td>{log.action}</td>
-                    <td>{log.resource || "—"}</td>
-                    <td>{log.result}</td>
-                    <td>{log.details || "—"}</td>
+                    <td>{log.file_id ?? "—"}</td>
+                    <td>{log.status}</td>
+                    <td>{log.ip_address || "—"}</td>
                   </tr>
                 )) : <tr><td colSpan="6">No hay acciones registradas.</td></tr>}
               </tbody>

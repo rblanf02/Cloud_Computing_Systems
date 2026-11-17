@@ -35,6 +35,7 @@
 
 | Fecha | Autor | Tipo | Resumen | Commit |
 |---|---|---|---|---|
+| 2026-11-15 | Maria (Maria Celdran Noguera) | BD + docs | Esquema definitivo, migraciones Alembic, integridad (punto 4) y diagrama ER | `c0d8139`, `b0a61d8`, `db92081`, `728630d`, `2da0e2c` |
 | 2026-11-14 | Jose (JoseParedes) | frontend + backend + infra + docs | Frontend React completo, comparticion, SHA-256, papelera, LogBook y HTTPS de confianza | (pendiente) |
 | 2026-11-13 | Jose (JoseParedes) | infra + frontend | HTTPS local con nginx en 8443 y cierre de puertos directos | (pendiente) |
 | 2026-11-03 | Jose (JoseParedes) | backend + docs + tests | P3: sesiones con idle timeout de 10 min y logout real | (pendiente) |
@@ -48,6 +49,48 @@
 ---
 
 ## 2. Detalle de los cambios
+
+### [2026-11-15] BD: esquema definitivo, migraciones Alembic, integridad y diagrama ER - Maria
+- **Autor**: Maria Celdran Noguera (m.celdrannoguera@um.es)
+- **Commits**: `c0d8139`, `b0a61d8`, `db92081`, `728630d`, `2da0e2c`
+- **Archivos/Areas**:
+  - `backend/app/models.py`, `schemas.py`, `deps.py`, `logbook.py`, `main.py`
+  - `backend/app/routers/admin.py`, `auth.py`, `files.py`, `logs.py`
+  - `backend/tests/test_admin.py`, `test_auth.py`, `test_files.py`
+  - `backend/alembic.ini`, `backend/alembic/env.py`, `backend/alembic/script.py.mako`,
+    `backend/alembic/versions/0001_initial_schema.py`, `backend/requirements.txt`
+  - `docs/04_architecture.md`, `docs/PROYECTO_COMPLETO.md`, `docs/esquema_bd.png` (nuevo)
+- **Que se hizo**:
+  - `c0d8139`: se alineo el esquema de PostgreSQL con el diseno final con las tablas
+    `users`, `files`, `file_versions`, `file_shares`, `log_events` y `user_sessions`.
+    Se eliminaron los permisos globales `can_*` del modelo `User`: el acceso depende ahora
+    de la propiedad del fichero y de `file_shares`. El LogBook queda como registro
+    historico (`log_id`, `user_id`, `file_id`, `action`, `status`, `ip_address`,
+    `created_at`). Se adaptaron schemas, dependencias, logbook, routers, seed y tests, y se
+    actualizaron `docs/04_architecture.md` y `docs/PROYECTO_COMPLETO.md`.
+  - `b0a61d8`: se anadio la configuracion de **Alembic** y la migracion baseline
+    `0001_initial_schema`. El arranque de la aplicacion intenta `alembic upgrade head` y,
+    si Alembic no esta disponible, cae a `Base.metadata.create_all()` para no romper
+    volumenes de PostgreSQL ya existentes. Se anadio `alembic` a `requirements.txt`.
+  - `db92081` (punto 4): se reforzo la integridad con `CheckConstraint` en
+    `users.quota_bytes >= 0`, `file_shares.access_level IN ('lector','editor','gestor')` y
+    `log_events.status IN ('OK','FAIL')`, mas indices en `files.deleted_at` y
+    `file_shares.granted_by`. Los niveles de la API (`reader`/`editor`/`manager`) se
+    normalizan a los valores guardados (`lector`/`editor`/`gestor`).
+  - `728630d` y `2da0e2c`: se anadio `docs/esquema_bd.png` con el diagrama ER de la base
+    de datos y se sustituyo por una version en ingles, mas clara y con mejor distribucion.
+- **Por que**: cerrar el punto 4 (integridad de la BD), dotar al proyecto de un mecanismo de
+  migraciones para que el esquema pueda evolucionar sin reconstruir el volumen, y dejar
+  documentado visualmente el modelo de datos para la presentacion.
+- **Como probarlo**:
+  ```powershell
+  docker compose up -d --build backend
+  docker compose exec backend alembic current      # debe mostrar 0001_initial_schema (head)
+  docker compose exec backend pytest -q
+  ```
+  Y abrir `docs/esquema_bd.png` para revisar el diagrama ER.
+
+---
 
 ### [2026-11-14] Frontend completo, comparticion, SHA-256 y HTTPS de confianza - Jose
 - **Autor**: Jose Paredes (@JoseParedes)

@@ -35,6 +35,7 @@
 
 | Fecha | Autor | Tipo | Resumen | Commit |
 |---|---|---|---|---|
+| 2026-11-17 | Maria (Maria Celdran Noguera) | backend + BD + tests | Integrar las funciones de Jose sobre el esquema nuevo: SHA-256, `/logs/export`, listado de shares y `username` en logs | (este commit) |
 | 2026-11-15 | Maria (Maria Celdran Noguera) | BD + docs | Esquema definitivo, migraciones Alembic, integridad (punto 4) y diagrama ER | `c0d8139`, `b0a61d8`, `db92081`, `728630d`, `2da0e2c` |
 | 2026-11-14 | Jose (JoseParedes) | frontend + backend + infra + docs | Frontend React completo, comparticion, SHA-256, papelera, LogBook y HTTPS de confianza | (pendiente) |
 | 2026-11-13 | Jose (JoseParedes) | infra + frontend | HTTPS local con nginx en 8443 y cierre de puertos directos | (pendiente) |
@@ -49,6 +50,34 @@
 ---
 
 ## 2. Detalle de los cambios
+
+### [2026-11-17] Integracion: funciones de Jose sobre el esquema nuevo - Maria
+- **Autor**: Maria Celdran Noguera (m.celdrannoguera@um.es)
+- **Archivos/Areas**:
+  - `backend/app/models.py`, `backend/app/schemas.py`
+  - `backend/app/routers/files.py`, `backend/app/routers/logs.py`
+  - `backend/alembic/versions/0002_add_sha256.py` (nuevo)
+  - `backend/tests/test_files.py`
+- **Que se hizo**:
+  - Se recupero el **SHA-256** del commit de Jose `8092361` y se adapto al esquema actual:
+    columna `sha256` en `file_versions`, campo en `FileVersionOut`, calculo en cada version
+    y verificacion en las dos descargas (si no coincide, responde `502` y registra
+    `INTEGRITY_FAIL`).
+  - Se recupero `GET /files/{file_id}/shares`, con los niveles convertidos de vuelta a
+    `reader/editor/manager` para la API (en la BD siguen siendo `lector/editor/gestor`).
+  - Se recupero `GET /logs/export` en JSON/CSV, con el mismo filtro por usuario que `/logs`.
+  - `LogEventOut` vuelve a exponer `username` (obtenido por joins con `users`), manteniendo
+    `user_id` del esquema nuevo.
+  - Nueva migracion `0002_add_sha256` para anadir la columna sin reconstruir el volumen.
+  - Se ajusto el test de restauracion al modelo de autorizacion por propiedad/share y se
+    corrigio `event.result` -> `event.status`.
+- **Por que**: la fusion `60f8850` ("priorizar cambios recientes") descarto 1027 lineas de
+  la rama de Jose y con ellas estas funciones, que el README y el enunciado siguen exigiendo.
+  Se integran ahora **manteniendo el esquema de BD nuevo** como base.
+- **Como probarlo**: `docker compose run --rm backend pytest -q` → **40 passed**.
+  `docker compose exec backend alembic current` → `0002_add_sha256 (head)`.
+
+---
 
 ### [2026-11-15] BD: esquema definitivo, migraciones Alembic, integridad y diagrama ER - Maria
 - **Autor**: Maria Celdran Noguera (m.celdrannoguera@um.es)

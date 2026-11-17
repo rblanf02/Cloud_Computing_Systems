@@ -1,5 +1,6 @@
 import mimetypes
 from datetime import datetime, timezone
+from hashlib import sha256
 from urllib.parse import quote
 
 from fastapi import (
@@ -21,7 +22,7 @@ from ..deps import get_file_with_access, require_permission
 from ..logbook import write_log
 from ..models import File as FileModel
 from ..models import FileShare, FileVersion, User
-from ..schemas import FileOut, FileShareCreate, FileVersionOut
+from ..schemas import FileOut, FileShareCreate, FileShareOut, FileVersionOut
 from ..storage import Storage, get_storage
 
 router = APIRouter(prefix="/files", tags=["files"])
@@ -94,6 +95,49 @@ def _version_out(version: FileVersion) -> FileVersionOut:
         uploaded_by_username=version.uploader.username,
         uploaded_at=version.uploaded_at,
         size_bytes=version.size_bytes,
+        sha256=version.sha256,
+    )
+
+
+def _share_out(share: FileShare) -> FileShareOut:
+    """Devuelve el nivel en los valores de la API (reader/editor/manager)."""
+    level_map = {"lector": "reader", "editor": "editor", "gestor": "manager"}
+    return FileShareOut(
+        file_id=share.file_id,
+        granted_to=share.granted_to,
+        granted_to_username=share.receiver.username,
+        granted_by=share.granted_by,
+        granted_by_username=share.granter.username,
+        access_level=level_map.get(share.access_level, share.access_level),
+    )
+
+
+def _verify_integrity(
+    db: Session,
+    version: FileVersion,
+    data: bytes,
+    current_user: User,
+    file_row: FileModel,
+    *,
+    action: str,
+) -> None:
+    """Comprueba el SHA-256 guardado. Si no coincide, registra INTEGRITY_FAIL y responde 502."""
+    if not version.sha256:
+        return
+    if sha256(data).hexdigest() == version.sha256:
+        return
+
+    write_log(
+        db,
+        action="INTEGRITY_FAIL",
+        user_id=current_user.user_id,
+        file_id=file_row.file_id,
+        status="FAIL",
+    )
+    db.commit()
+    raise HTTPException(
+        status_code=status.HTTP_502_BAD_GATEWAY,
+        detail="File integrity check failed",
     )
 
 
@@ -147,6 +191,7 @@ def _store_version(
                 blob_name=blob_name,
                 uploaded_by=user.user_id,
                 size_bytes=len(data),
+                sha256=sha256(data).hexdigest(),
             )
         )
         write_log(
@@ -348,6 +393,8 @@ def download_file(
         db.commit()
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not download file")
 
+    _verify_integrity(db, version, data, current_user, file_row, action="DOWNLOAD")
+
     write_log(db, action="DOWNLOAD", user_id=current_user.user_id, file_id=file_row.file_id, status="OK")
     db.commit()
 
@@ -403,6 +450,8 @@ def download_version(
         write_log(db, action="DOWNLOAD_VERSION", user_id=current_user.user_id, file_id=file_row.file_id, status="FAIL")
         db.commit()
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail="Could not download version")
+
+    _verify_integrity(db, version, data, current_user, file_row, action="DOWNLOAD_VERSION")
 
     write_log(db, action="DOWNLOAD_VERSION", user_id=current_user.user_id, file_id=file_row.file_id, status="OK")
     db.commit()
@@ -478,6 +527,22 @@ def restore_file(
     write_log(db, action="RESTORE_FILE", user_id=current_user.user_id, file_id=file_id, status="OK")
     db.commit()
     return {"detail": "File restored successfully"}
+
+
+@router.get("/{file_id}/shares", response_model=list[FileShareOut])
+def list_file_shares(
+    file_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_permission("read")),
+):
+    file_row = get_file_with_access(db, file_id, current_user, required_level="manager")
+    shares = (
+        db.query(FileShare)
+        .filter(FileShare.file_id == file_row.file_id)
+        .order_by(FileShare.granted_to)
+        .all()
+    )
+    return [_share_out(share) for share in shares]
 
 
 @router.post("/{file_id}/share", status_code=status.HTTP_201_CREATED)

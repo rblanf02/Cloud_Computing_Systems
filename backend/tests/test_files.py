@@ -344,18 +344,26 @@ def test_restore_old_version_creates_new_version(client, db_session, storage):
     assert old_second.content == b"dos"
 
 
-def test_restore_requires_update_permission(client, db_session, storage):
+def test_restore_requires_owner_or_share(client, db_session, storage):
+    """Con el esquema nuevo no hay permisos can_*; manda la propiedad o un share."""
     _create_user(db_session, "restorer1")
+    _create_user(db_session, "intruder1")
     token = _login(client, "restorer1")
+    intruder_token = _login(client, "intruder1")
 
     upload = _upload_new(client, token, "restaurar.txt", b"uno", "text/plain")
     assert upload.status_code == 201
+    file_id = upload.json()["file_id"]
 
-    response = client.post(
-        f"/files/{upload.json()['file_id']}/versions/1/restore",
-        headers=_auth(token),
-    )
-    assert response.status_code == 403
+    # El propietario sí puede restaurar
+    assert client.post(
+        f"/files/{file_id}/versions/1/restore", headers=_auth(token)
+    ).status_code == 201
+
+    # Un usuario sin compartición no puede (no ve el fichero)
+    assert client.post(
+        f"/files/{file_id}/versions/1/restore", headers=_auth(intruder_token)
+    ).status_code == 404
 
 
 def test_version_store_and_expose_sha256(client, db_session, storage):
@@ -397,4 +405,4 @@ def test_download_detects_integrity_failure(client, db_session, storage):
         .first()
     )
     assert event is not None
-    assert event.result == "FAIL"
+    assert event.status == "FAIL"

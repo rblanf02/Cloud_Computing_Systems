@@ -106,6 +106,7 @@ class FileVersion(Base):
     )
     uploaded_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     size_bytes = Column(BigInteger, nullable=False, default=0)
+    sha256 = Column(String(64), nullable=True)
 
     __table_args__ = (
         UniqueConstraint("file_id", "version_number", name="uq_versions_file_number"),

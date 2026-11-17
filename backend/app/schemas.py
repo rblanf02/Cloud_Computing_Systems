@@ -43,6 +43,7 @@ class FileVersionOut(BaseModel):
     uploaded_by_username: str
     uploaded_at: datetime
     size_bytes: int
+    sha256: str | None = None
 
 
 class LoginRequest(BaseModel):
@@ -78,6 +79,7 @@ class FileShareOut(BaseModel):
 class LogEventOut(BaseModel):
     log_id: int
     user_id: int | None
+    username: str | None = None
     file_id: int | None
     action: str
     status: str

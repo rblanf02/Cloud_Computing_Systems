@@ -9,18 +9,12 @@ from app.security import hash_password
 def _create_user(
     db_session,
     username: str,
-    can_read: bool = True,
-    can_write: bool = True,
-    can_update: bool = True,
     is_admin: bool = False,
 ) -> User:
     user = User(
         username=username,
         email=f"{username}@example.com",
         hashed_password=hash_password("secreto123"),
-        can_read=can_read,
-        can_write=can_write,
-        can_update=can_update,
         is_admin=is_admin,
     )
     db_session.add(user)

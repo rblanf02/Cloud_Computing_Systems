@@ -87,7 +87,7 @@ def test_create_list_and_download_file(client, db_session, storage):
     assert len(listed.json()) == 1
     assert listed.json()[0]["file_id"] == data["file_id"]
 
-    download = client.get(f"/files/{data['id']}/download", headers=_auth(token))
+    download = client.get(f"/files/{data['file_id']}/download", headers=_auth(token))
     assert download.status_code == 200
     assert download.content == b"primera"
     assert download.headers["content-type"].startswith("image/jpeg")
@@ -207,11 +207,11 @@ def test_same_filename_allowed_for_different_users(client, db_session, storage):
     ).status_code == 201
 
     owner_download = client.get(
-        f"/files/{first.json()['id']}/download",
+        f"/files/{first.json()['file_id']}/download",
         headers=_auth(owner_token),
     )
     other_download = client.get(
-        f"/files/{second.json()['id']}/download",
+        f"/files/{second.json()['file_id']}/download",
         headers=_auth(other_token),
     )
     assert owner_download.content == b"version de owner"
@@ -352,19 +352,19 @@ def test_restore_requires_update_permission(client, db_session, storage):
     assert upload.status_code == 201
 
     response = client.post(
-        f"/files/{upload.json()['id']}/versions/1/restore",
+        f"/files/{upload.json()['file_id']}/versions/1/restore",
         headers=_auth(token),
     )
     assert response.status_code == 403
 
 
 def test_version_store_and_expose_sha256(client, db_session, storage):
-    _create_user(db_session, "hasher1", can_write=True, can_update=True)
+    _create_user(db_session, "hasher1")
     token = _login(client, "hasher1")
 
     upload = _upload_new(client, token, "hash.txt", b"contenido", "text/plain")
     assert upload.status_code == 201
-    file_id = upload.json()["id"]
+    file_id = upload.json()["file_id"]
 
     assert _upload_version(client, token, file_id, b"contenido", "text/plain").status_code == 201
 
@@ -375,12 +375,12 @@ def test_version_store_and_expose_sha256(client, db_session, storage):
 
 
 def test_download_detects_integrity_failure(client, db_session, storage):
-    _create_user(db_session, "integrity1", can_write=True)
+    _create_user(db_session, "integrity1")
     token = _login(client, "integrity1")
 
     upload = _upload_new(client, token, "integridad.txt", b"original", "text/plain")
     assert upload.status_code == 201
-    file_id = upload.json()["id"]
+    file_id = upload.json()["file_id"]
 
     fastapi_app.dependency_overrides[get_storage] = lambda: CorruptStorage()
     try:

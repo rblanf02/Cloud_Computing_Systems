@@ -5,18 +5,12 @@ from app.security import hash_password
 def _create_user(
     db_session,
     username: str,
-    can_read: bool = True,
-    can_write: bool = True,
-    can_update: bool = True,
     is_admin: bool = False,
 ) -> User:
     user = User(
         username=username,
         email=f"{username}@example.com",
         hashed_password=hash_password("secreto123"),
-        can_read=can_read,
-        can_write=can_write,
-        can_update=can_update,
         is_admin=is_admin,
     )
     db_session.add(user)
@@ -48,18 +42,13 @@ def _upload(client, token: str, filename: str, content: bytes):
 
 def test_owner_can_share_list_and_revoke(client, db_session, storage):
     owner = _create_user(db_session, "shareowner")
-    receiver = _create_user(
-        db_session,
-        "sharereceiver",
-        can_write=False,
-        can_update=False,
-    )
+    receiver = _create_user(db_session, "sharereceiver")
     owner_token = _login(client, "shareowner")
     receiver_token = _login(client, "sharereceiver")
 
     upload = _upload(client, owner_token, "compartido.txt", b"contenido")
     assert upload.status_code == 201
-    file_id = upload.json()["id"]
+    file_id = upload.json()["file_id"]
 
     share = client.post(
         f"/files/{file_id}/share",
@@ -71,23 +60,23 @@ def test_owner_can_share_list_and_revoke(client, db_session, storage):
     shares = client.get(f"/files/{file_id}/shares", headers=_auth(owner_token))
     assert shares.status_code == 200
     assert len(shares.json()) == 1
-    assert shares.json()[0]["granted_to"] == receiver.id
+    assert shares.json()[0]["granted_to"] == receiver.user_id
     assert shares.json()[0]["granted_to_username"] == "sharereceiver"
     assert shares.json()[0]["granted_by_username"] == "shareowner"
     assert shares.json()[0]["access_level"] == "reader"
 
     shared = client.get("/files/shared", headers=_auth(receiver_token))
     assert shared.status_code == 200
-    assert [item["id"] for item in shared.json()] == [file_id]
+    assert [item["file_id"] for item in shared.json()] == [file_id]
 
     download = client.get(f"/files/{file_id}/download", headers=_auth(receiver_token))
     assert download.status_code == 200
     assert download.content == b"contenido"
 
-    assert owner.id is not None
+    assert owner.user_id is not None
 
     revoke = client.delete(
-        f"/files/{file_id}/share/{receiver.id}",
+        f"/files/{file_id}/share/{receiver.user_id}",
         headers=_auth(owner_token),
     )
     assert revoke.status_code == 200
@@ -102,13 +91,13 @@ def test_owner_can_share_list_and_revoke(client, db_session, storage):
 
 def test_receiver_cannot_manage_shares(client, db_session, storage):
     _create_user(db_session, "shareowner2")
-    _create_user(db_session, "sharereader2", can_write=False, can_update=False)
+    _create_user(db_session, "sharereader2")
     owner_token = _login(client, "shareowner2")
     reader_token = _login(client, "sharereader2")
 
     upload = _upload(client, owner_token, "solo-lectura.txt", b"datos")
     assert upload.status_code == 201
-    file_id = upload.json()["id"]
+    file_id = upload.json()["file_id"]
 
     assert client.post(
         f"/files/{file_id}/share",

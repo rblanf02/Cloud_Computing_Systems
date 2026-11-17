@@ -1,9 +1,9 @@
 # CloudFile Exchange
 
 Sistema de intercambio de ficheros (documentos y fotos) entre aplicaciones
-(PC, tablet, movil) y la nube, con autenticacion, autorizacion (read/write/update),
-control de versiones, integridad SHA-256, comparticion y LogBook (registro de accesos
-y operaciones).
+(PC, tablet, movil) y la nube, con autenticacion JWT, autorizacion por propiedad de
+los ficheros, comparticion entre usuarios, control de versiones, integridad SHA-256
+y LogBook (registro de accesos y operaciones).
 
 Proyecto de la asignatura **Cloud Computing Systems**.
 
@@ -22,16 +22,27 @@ Proyecto de la asignatura **Cloud Computing Systems**.
 ## Funcionalidad
 
 - Registro/login con JWT y sesiones revocables por inactividad.
-- Cada usuario nuevo recibe permisos `can_read`, `can_write` y `can_update`.
-- Admin puede listar usuarios y revocar o devolver permisos desde la UI.
+- Autorizacion por propiedad: cada usuario solo accede a sus propios ficheros; el admin
+  tiene acceso total y puede listar usuarios y ficheros (`/admin/users`, `/admin/files`).
 - Subida de ficheros, versionado explicito, historial, descarga y restauracion.
 - SHA-256 por version: se muestra en la UI y se verifica en cada descarga.
-- Comparticion por usuario con niveles `reader`, `editor` y `manager`.
+- Comparticion por usuario con niveles `reader`, `editor` y `manager`
+  (en la BD se guardan como `lector`, `editor` y `gestor`).
 - Papelera con restauracion y borrado definitivo.
 - LogBook filtrado por usuario (el admin ve todo) con export CSV/JSON.
 - HTTPS local con certificado de confianza (mkcert).
 
 ## Inicio rapido
+
+**macOS / Linux:**
+
+```bash
+cp .env.example .env
+# Genera el certificado antes del primer arranque (ver "HTTPS local")
+docker compose up -d --build
+```
+
+**Windows (PowerShell):**
 
 ```powershell
 Copy-Item .env.example .env
@@ -49,6 +60,10 @@ Abrir `https://localhost:8443`. La API y Swagger estan en
 FiloSottile.mkcert`). El certificado cubre `localhost`, `127.0.0.1` y la IP de la LAN
 que se pase con `-Ip`.
 
+- En macOS: `brew install mkcert nss`, `mkcert -install` y luego
+  `mkcert -cert-file infra/nginx/certs/server.pem -key-file infra/nginx/certs/server.key localhost 127.0.0.1 <IP_LAN>`
+  (la carpeta `infra/nginx/certs/` debe existir). Para tablet/movil, copia el
+  `rootCA.pem` que indica `mkcert -CAROOT`.
 - El CA local se instala en el almacen de confianza de Windows la primera vez.
 - Para tablet/movil hay que instalar `infra/nginx/certs/rootCA.pem` como CA de confianza
   en el dispositivo.
@@ -57,13 +72,13 @@ que se pase con `-Ip`.
 
 ## Tests
 
-```powershell
+```bash
 docker compose up -d db azurite
 docker compose run --rm backend pytest -q
-cd frontend
-npm ci
-npm run build
+cd frontend && npm ci && npm run build
 ```
+
+(Los mismos comandos funcionan en PowerShell de Windows.)
 
 ## Contenido del repositorio
 

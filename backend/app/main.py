@@ -1,14 +1,34 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import text
 
 from .config import settings
 from .database import Base, SessionLocal, engine
 from .models import User
 from .routers import admin, auth, files, logs
 from .security import hash_password
+
+
+def run_migrations() -> None:
+    """Aplica migraciones de BD si Alembic está disponible; si no, crea tablas."""
+    try:
+        from alembic import command
+        from alembic.config import Config
+
+        ini_path = Path(__file__).resolve().parents[1] / "alembic.ini"
+        if ini_path.exists():
+            alembic_cfg = Config(str(ini_path))
+            alembic_cfg.set_main_option(
+                "script_location", str(ini_path.parent / "alembic")
+            )
+            command.upgrade(alembic_cfg, "head")
+            return
+    except Exception:
+        pass
+
+    Base.metadata.create_all(bind=engine)
 
 
 def seed_admin() -> None:
@@ -24,36 +44,12 @@ def seed_admin() -> None:
             username=settings.seed_admin_username,
             email=settings.seed_admin_email,
             hashed_password=hash_password(settings.seed_admin_password),
-            can_read=True,
-            can_write=True,
-            can_update=True,
             is_admin=True,
         )
         db.add(admin)
         db.commit()
     finally:
         db.close()
-
-
-def ensure_schema() -> None:
-    if engine.dialect.name != "postgresql":
-        return
-
-    migrations = [
-        ("users", "quota_bytes", "BIGINT NOT NULL DEFAULT 1073741824"),
-        ("files", "deleted_at", "TIMESTAMP WITH TIME ZONE"),
-        ("file_versions", "content_type", "VARCHAR(100)"),
-        ("file_versions", "sha256", "VARCHAR(64)"),
-    ]
-
-    with engine.begin() as connection:
-        for table, column, ddl in migrations:
-            connection.execute(
-                text(
-                    f"ALTER TABLE {table} "
-                    f"ADD COLUMN IF NOT EXISTS {column} {ddl}"
-                )
-            )
 
 
 @asynccontextmanager
@@ -66,8 +62,7 @@ async def lifespan(app: FastAPI):
                 "SEED_ADMIN_PASSWORD debe cambiarse fuera de desarrollo"
             )
 
-    Base.metadata.create_all(bind=engine)
-    ensure_schema()
+    run_migrations()
     if settings.seed_admin:
         seed_admin()
     yield

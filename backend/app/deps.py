@@ -51,7 +51,7 @@ def get_auth_context(
         db.query(UserSession)
         .filter(
             UserSession.id == session_id,
-            UserSession.user_id == user.id,
+            UserSession.user_id == user.user_id,
         )
         .first()
     )
@@ -82,13 +82,9 @@ def get_current_user(
 
 def require_permission(permission: str):
     def checker(current_user: User = Depends(get_current_user)) -> User:
-        if current_user.is_admin:
-            return current_user
-        if not getattr(current_user, f"can_{permission}", False):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"Permiso '{permission}' requerido",
-            )
+        # Con el nuevo esquema, los permisos globales (can_read/write/update) ya no
+        # forman parte de users. El acceso a ficheros propios/ajenos se controla en
+        # los endpoints y en get_file_with_access/file_shares.
         return current_user
 
     return checker
@@ -110,9 +106,9 @@ def get_owned_file(
     *,
     for_update: bool = False,
 ) -> File:
-    query = db.query(File).filter(File.id == file_id)
+    query = db.query(File).filter(File.file_id == file_id)
     if not user.is_admin:
-        query = query.filter(File.owner_id == user.id)
+        query = query.filter(File.owner_id == user.user_id)
     if for_update:
         query = query.with_for_update()
 
@@ -133,7 +129,7 @@ def get_file_with_access(
     for_update: bool = False,
 ) -> File:
     """Check file ownership, trash status, and granular shared permissions."""
-    query = db.query(File).filter(File.id == file_id)
+    query = db.query(File).filter(File.file_id == file_id)
     if for_update:
         query = query.with_for_update()
 
@@ -150,14 +146,14 @@ def get_file_with_access(
             detail="File not found or moved to trash",
         )
 
-    if user.is_admin or file_row.owner_id == user.id:
+    if user.is_admin or file_row.owner_id == user.user_id:
         return file_row
 
     share = (
         db.query(FileShare)
         .filter(
             FileShare.file_id == file_id,
-            FileShare.granted_to == user.id,
+            FileShare.granted_to == user.user_id,
         )
         .first()
     )
@@ -168,9 +164,18 @@ def get_file_with_access(
             detail="File not found",
         )
 
+    level_map = {
+        "lector": "reader",
+        "editor": "editor",
+        "gestor": "manager",
+        "reader": "reader",
+        "manager": "manager",
+    }
     hierarchy = {"reader": 1, "editor": 2, "manager": 3}
-    user_score = hierarchy.get(share.access_level, 0)
-    required_score = hierarchy.get(required_level, 1)
+    user_level = level_map.get(share.access_level, share.access_level)
+    req_level = level_map.get(required_level, required_level)
+    user_score = hierarchy.get(user_level, 0)
+    required_score = hierarchy.get(req_level, 1)
 
     if user_score < required_score:
         raise HTTPException(

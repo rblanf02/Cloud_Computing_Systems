@@ -14,46 +14,35 @@ class UserRegister(BaseModel):
 class UserOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
-    id: int
+    user_id: int
     username: str
     email: str
-    can_read: bool
-    can_write: bool
-    can_update: bool
     is_admin: bool
     created_at: datetime
+    quota_bytes: int
 
 
 class FileOut(BaseModel):
-    id: int
+    file_id: int
+    filename: str
+    extension: str | None
     owner_id: int
     owner_username: str
-    filename: str
-    content_type: str | None
-    current_version: int
-    size_bytes: int
-    version_created_at: datetime
-    created_at: datetime
-    access_level: str | None = None
+    deleted_at: datetime | None = None
+    current_version: int | None = None
+    size_bytes: int = 0
+    uploaded_at: datetime | None = None
+    uploaded_by: int | None = None
 
 
 class FileVersionOut(BaseModel):
-    id: int
+    file_id: int
     version_number: int
+    blob_name: str
+    uploaded_by: int
+    uploaded_by_username: str
+    uploaded_at: datetime
     size_bytes: int
-    sha256: str | None
-    content_type: str | None
-    created_at: datetime
-    created_by: int
-    created_by_username: str
-
-
-class UserPermissionsUpdate(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    can_read: bool | None = None
-    can_write: bool | None = None
-    can_update: bool | None = None
 
 
 class LoginRequest(BaseModel):
@@ -74,15 +63,23 @@ class FileShareCreate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     granted_to_username: str = Field(..., description="Username to grant access to")
-    access_level: str = Field(..., pattern="^(reader|editor|manager)$")
+    access_level: str = Field(..., pattern="^(lector|editor|gestor|reader|editor|manager)$")
+
 
 class FileShareOut(BaseModel):
-    model_config = ConfigDict(from_attributes=True)
-
     file_id: int
     granted_to: int
     granted_to_username: str
     granted_by: int
     granted_by_username: str
     access_level: str
+
+
+class LogEventOut(BaseModel):
+    log_id: int
+    user_id: int | None
+    file_id: int | None
+    action: str
+    status: str
+    ip_address: str | None
     created_at: datetime
